@@ -108,10 +108,10 @@ function New-Log {
             return
         }
         try {
-            if ($Message.GetType().Name -eq 'Hashtable') {
+            if ($Message -and $Message.GetType().Name -eq 'Hashtable') {
                 $Message = New-Object -TypeName PSObject -Property $Message
             }
-            if ($Message.GetType().Name -notin @("PSCustomObject", "Hashtable", "String", "Software")) {
+            if ($Message -and $Message.GetType().Name -notin @("PSCustomObject", "Hashtable", "String", "Software")) {
                 Write-Host "Unsupported message type: $($Message.GetType().Name). Must be PSCustomObject, Hashtable or string" -ForegroundColor Red
                 return
             }
@@ -235,7 +235,7 @@ function New-Log {
             $object = [PSCustomObject]@{
                 Timestamp      = $timestamp
                 Level          = $Level
-                Message        = if ($originalMessage.GetType().Name -eq 'String') {
+                Message        = if ($originalMessage -and $originalMessage.GetType().Name -eq 'String') {
                     $Message
                 }
                 else {
