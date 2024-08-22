@@ -418,6 +418,55 @@ function Ensure-NanaZipInstalled {
         return $false
     }
 }
+<#
+
+.DESCRIPTION
+This PowerShell script is designed to update Plex HTPC and its MPV (libmpv) component on Windows systems. It checks for updates, downloads them if available, and installs them while handling the process of stopping and restarting the Plex HTPC application.
+
+The script requires administrator privileges to run successfully.
+It uses the New-Log function for logging, which should be defined or imported separately.
+The script relies on NanaZip for extracting files, and will attempt to install it using winget if not present.
+The script backs up the current MPV client before updating, unless the -Force parameter is used and the backup fails.
+The script handles stopping and restarting the Plex HTPC process during updates.
+
+Main Functions:
+
+Get-PlexHTPCFileVersion: Retrieves the current version of Plex HTPC installed on the system.
+Check-PlexHTPCUpdate: Checks if there's an update available for Plex HTPC.
+Compare-MPVVersion: Compares MPV versions.
+Get-MPVVersion: Retrieves the current and latest versions of MPV.
+Check-MPVUpdate: Checks if there's an update available for MPV.
+Stop-RestartPlexHTPC: Stops or restarts the Plex HTPC process.
+Update-PlexHTPC: Performs the update process for Plex HTPC.
+Update-MPV: Performs the update process for MPV.
+Ensure-NanaZipInstalled: Ensures that NanaZip is installed, which is required for extracting update files.
+
+.PARAMETER CompareVersion
+CompareVersion (switch): Used in Check-MPVUpdate to download and compare MPV versions based on file version instead of release date.
+.PARAMETER KeepCurrentVersion
+KeepCurrentVersion (switch): Used in Check-MPVUpdate to skip the update and keep the current MPV version.
+.PARAMETER Restart
+Restart (switch): Used in Stop-RestartPlexHTPC to restart Plex HTPC after stopping it.
+.PARAMETER Force
+Force (switch): Used in Update-MPV to continue the update process even if backing up the current MPV client fails.
+
+.OUTPUTS
+
+Example output:
+
+[2024-08-22 21:51:41.925][SUCCESS] NanaZip version [3.1.1080.0] is already installed. [Function: Ensure-NanaZipInstalled]
+[2024-08-22 21:51:43.332][SUCCESS] Successfully downloaded the latest mpv client to compare against. [Function: Get-MPVVersion]
+[2024-08-22 21:51:44.130][SUCCESS] Successfully extraced the mpv update... [Function: Get-MPVVersion]
+[2024-08-22 21:51:44.163][SUCCESS] Local mpv version: [v0.38.0_4-243-g718fd0d8] is up to date. [Function: Check-MPVUpdate]
+[2024-08-22 21:51:44.164][INFO] You are using a custom modified PlexHTPC mpv and not the standard PlexHTPC mpv client. [Function: Check-MPVUpdate]
+[2024-08-22 21:51:44.193][INFO] No MPV update required.
+[2024-08-22 21:51:44.347][SUCCESS] Successfully got data from plex.tv. [Function: Check-PlexHTPCUpdate]
+[2024-08-22 21:51:44.394][SUCCESS] Plex HTPC is up-to-date. [Function: Check-PlexHTPCUpdate]
+[2024-08-22 21:51:44.395][SUCCESS] Current Plex HTPC version: [1.66.1.215] same as latest online version: [1.66.1.215] [Function: Check-PlexHTPCUpdate]
+[2024-08-22 21:51:44.407][INFO] No Plex HTPC update required.
+[2024-08-22 21:51:44.411][SUCCESS] Update process completed.
+
+#>
 # Main script & Invoke Log Function
 ### OBS: New-Log Function is neede otherwise remove all New-Log and replace with Write-Host. New-Log is vastly better though, check the link below:
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
