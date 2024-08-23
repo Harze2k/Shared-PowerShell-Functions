@@ -7,11 +7,23 @@ Additionally, it provides detailed information for ERROR logs, including the scr
 
 .PARAMETER Message
 -Message: Accepts the log message, which can be a string, hashtable, or PSCustomObject.
+
+.PARAMETER Level
 -Level: Specifies the severity level of the log message, defaulting to INFO.
+
+.PARAMETER NoConsole
 -NoConsole: Suppresses console output if specified, useful for silent logging.
+
+.PARAMETER PassThru
 -PassThru: Returns the formatted log message as a string instead of writing it to the console or file.
+
+.PARAMETER AsObject
 -AsObject: Returns the log entry as a PSCustomObject, which can be useful for further processing or outputting structured data.
+
+.PARAMETER ForcedLogFile
 -ForcedLogFile: Overwrites the existing log file with the new log entry if specified, otherwise appends to the log file.
+
+.PARAMETER LogFilePath
 -LogFilePath: Specifies the path to the log file where the message should be written. If the directory does not exist, it is created automatically.
 
 .EXAMPLE
