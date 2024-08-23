@@ -4,32 +4,23 @@ The New-Log function is a versatile logging utility designed to provide detailed
 It supports logging messages of different severity levels, including ERROR, WARNING, INFO, SUCCESS, and DEBUG.
 The function also handles different PowerShell versions, including PowerShell Core (6 and above), and adjusts the console output for color-coded messages based on the severity level.
 Additionally, it provides detailed information for ERROR logs, including the script line number, function name, and the exact code that failed, enhancing the debugging process.
-
 .PARAMETER Message
 -Message: Accepts the log message, which can be a string, hashtable, or PSCustomObject.
-
 .PARAMETER Level
 -Level: Specifies the severity level of the log message, defaulting to INFO.
-
 .PARAMETER NoConsole
 -NoConsole: Suppresses console output if specified, useful for silent logging.
-
 .PARAMETER PassThru
 -PassThru: Returns the formatted log message as a string instead of writing it to the console or file.
-
 .PARAMETER AsObject
 -AsObject: Returns the log entry as a PSCustomObject, which can be useful for further processing or outputting structured data.
-
 .PARAMETER ForcedLogFile
 -ForcedLogFile: Overwrites the existing log file with the new log entry if specified, otherwise appends to the log file.
-
 .PARAMETER LogFilePath
 -LogFilePath: Specifies the path to the log file where the message should be written. If the directory does not exist, it is created automatically.
-
 .EXAMPLE
 Example 1: Log an informational message to the console
 New-Log -Message "The process completed successfully." -Level "INFO"
-
 Example 2: Log an error message to a log file. These messeges are standard:
 Timestamp      : 2024-08-16 09:56:02.178
 Level          : ERROR
@@ -38,7 +29,6 @@ Exception      : Cannot find path 'C:\ttmm' because it does not exist.
 CallerFunction : <Name of function used>
 CodeRow        : (2,433) (Function,Script)
 FailedCode     : Get-ChildItem -Path C:\ttmm -ErrorAction Stop
-
 try {
     Get-ChildItem -Path C:\ttmm -ErrorAction Stop
 }
@@ -47,13 +37,10 @@ catch {
 }
 Example 3: Log a debug message without console output but returning the log as a string
 $logEntry = New-Log -Message "Debugging the script." -Level "DEBUG" -NoConsole -PassThru
-
 Example 4: Log a success message and return it as a PSCustomObject for further processing
 $logObject = New-Log -Message "Operation completed successfully." -Level "SUCCESS" -AsObject
-
 Example 5: Overwrite the existing log file with a warning message
 New-Log -Message "This will overwrite the log file." -Level "WARNING" -LogFilePath "C:\Logs\warning.log" -ForcedLogFile
-
 Example 6: Log a message with a PSCustomObject and output it both to the console and as a PSCustomObject
 $customMessage = [PSCustomObject]@{
     UserName = "Admin"
@@ -74,6 +61,20 @@ function New-Log {
         [Parameter(Position = 6)][string]$LogFilePath
     )
     Begin {
+        function Write-MessageToConsole {
+            if ($LogSentToConsole -eq $true) {
+                return
+            }
+            if (!($NoConsole.IsPresent)) {
+                if ($isPSCore) {
+                    Write-Host $logMessage
+                }
+                else {
+                    $logMessage | ForEach-Object { Write-Host $_ -ForegroundColor $levelColors[$Level].PS }
+                }
+            }
+            return $true
+        }
         $isPSCore = $PSVersionTable.PSVersion.Major -ge 6
         $levelColors = @{
             "ERROR"   = @{ANSI = "31"; PS = "Red" }
@@ -100,31 +101,19 @@ function New-Log {
         catch {
             Write-Host "Unable to set console encoding to UTF8" -ForegroundColor Yellow
         }
-        function Write-MessageToConsole {
-            if ($LogSentToConsole -eq $true) {
-                return
-            }
-            if (!($NoConsole.IsPresent)) {
-                if ($isPSCore) {
-                    Write-Host $logMessage
-                }
-                else {
-                    $logMessage | ForEach-Object { Write-Host $_ -ForegroundColor $levelColors[$Level].PS }
-                }
-            }
-            return $true
-        }
+
     }
     Process {
         if ($null -eq $Message -and $Level -ne "ERROR") {
             return
         }
         try {
+            @('exceptionMessage', 'failedCode', 'scriptLines', 'lineInfo') | ForEach-Object { Set-Variable -Name $_ -Value $null }
             if ($Message -and $Message.GetType().Name -eq 'Hashtable') {
                 $Message = New-Object -TypeName PSObject -Property $Message
             }
             if ($Message -and $Message.GetType().Name -notin @("PSCustomObject", "Hashtable", "String", "Software")) {
-                Write-Host "Unsupported message type: $($Message.GetType().Name). Must be PSCustomObject, Hashtable or string" -ForegroundColor Red
+                New-Log "Unsupported message type: $($Message.GetType().Name). Must be PSCustomObject, Hashtable or string" -ForegroundColor Red
                 return
             }
             $logSentToConsole = $false
@@ -179,11 +168,11 @@ function New-Log {
                 $errorRecord = $Error[0]
                 $invocationInfo = $errorRecord.InvocationInfo
                 try {
-                    if ($ErrorRecord.InvocationInfo.PSCommandPath -and (Test-Path -Path $ErrorRecord.InvocationInfo.PSCommandPath)) {
-                        $scriptLines = Get-Content -Path "$($ErrorRecord.InvocationInfo.PSCommandPath)" -ErrorAction Stop
+                    if ($ErrorRecord.InvocationInfo.PSCommandPath -and (Test-Path -Path $errorRecord.InvocationInfo.PSCommandPath)) {
+                        $scriptLines = Get-Content -Path "$($errorRecord.InvocationInfo.PSCommandPath)" -ErrorAction Stop
                     }
-                    elseif ($ErrorRecord.InvocationInfo.ScriptName -and (Test-Path -Path $ErrorRecord.InvocationInfo.ScriptName)) {
-                        $scriptLines = Get-Content -Path "$($ErrorRecord.InvocationInfo.ScriptName)" -ErrorAction Stop
+                    elseif ($ErrorRecord.InvocationInfo.ScriptName -and (Test-Path -Path $errorRecord.InvocationInfo.ScriptName)) {
+                        $scriptLines = Get-Content -Path "$($errorRecord.InvocationInfo.ScriptName)" -ErrorAction Stop
                     }
                 }
                 catch {
@@ -195,12 +184,17 @@ function New-Log {
                     }
                 }
                 $functionName = $callerInfo.Command
-                $failedCode = $invocationInfo.Line.Trim()
+                $failedCode = if ($invocationInfo.Line) {
+                    $invocationInfo.Line.Trim()
+                }
+                else {
+                    $null
+                }
                 [int]$errorLine = $errorRecord.InvocationInfo.ScriptLineNumber
                 if ([string]::IsNullOrEmpty($errorLine)) {
                     [int]$errorLine = $invocationInfo.ScriptLineNumber
                 }
-                if ($null -ne $scriptLines) {
+                if (!([string]::IsNullOrEmpty($scriptLines))) {
                     [int]$functionStartLine = ($scriptLines | Select-String -Pattern "function\s+$functionName" | Select-Object -First 1).LineNumber
                     $lineNumberInFunction = $errorLine - $functionStartLine
                     $lineInfo = "($lineNumberInFunction,$errorLine) (Function,Script)"
@@ -247,32 +241,32 @@ function New-Log {
             $object = [PSCustomObject]@{
                 Timestamp      = $timestamp
                 Level          = $Level
-                Message        = if ($originalMessage -and $originalMessage.GetType().Name -eq 'String') {
-                    $Message
+                Message        = if (!([string]::IsNullOrEmpty($originalMessage)) -and $originalMessage.GetType().Name -eq 'String' ) {
+                    $message
                 }
                 else {
                     [pscustomobject](($Message | Format-List | Out-String).Trim()) -split "`n"
                 }
-                Exception      = if (Get-Variable -Name 'exceptionMessage' -ErrorAction SilentlyContinue) {
+                Exception      = if ($exceptionMessage -and !([string]::IsNullOrEmpty($exceptionMessage)) ) {
                     $exceptionMessage
                 }
                 else {
                     $null
                 }
-                CallerFunction = if ($callerInfo.FunctionName -eq '<ScriptBlock>') {
+                CallerFunction = if (!([string]::IsNullOrEmpty($callerInfo)) -and $callerInfo.FunctionName -eq '<ScriptBlock>') {
                     $null
                 }
                 else {
                     $callerInfo.FunctionName
                 }
-                CodeRow        = if (Get-Variable -Name 'lineInfo' -ErrorAction SilentlyContinue) {
+                CodeRow        = if ($lineInfo -and !([string]::IsNullOrEmpty($lineInfo)) ) {
                     $lineInfo
                 }
                 else {
                     $null
                 }
-                FailedCode     = if (Get-Variable -Name 'failedCode' -ErrorAction SilentlyContinue) {
-                    $failedCode
+                FailedCode     = if ($FailedCode -and !([string]::IsNullOrEmpty($FailedCode)) ) {
+                    $FailedCode
                 }
                 else {
                     $null
