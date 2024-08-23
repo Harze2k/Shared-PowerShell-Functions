@@ -215,7 +215,7 @@ function New-Log {
                         $lineInfo = "$errorLine (Script)"
                     }
                 }
-                $exceptionMessage = $errorRecord.Exception.Message
+                $exceptionMessage = $($errorRecord.Exception.Message)
                 if ($isPSCore) {
                     $logMessage += "[${blue}CodeRow${reset}: $lineInfo]"
                     $logMessage += "[${blue}FailedCode${reset}: $failedCode]"
@@ -253,7 +253,7 @@ function New-Log {
                 else {
                     [pscustomobject](($Message | Format-List | Out-String).Trim()) -split "`n"
                 }
-                Exception      = if ($exceptionMessage) {
+                Exception      = if (Get-Variable -Name 'exceptionMessage' -ErrorAction SilentlyContinue) {
                     $exceptionMessage
                 }
                 else {
@@ -265,8 +265,18 @@ function New-Log {
                 else {
                     $callerInfo.FunctionName
                 }
-                CodeRow        = $lineInfo
-                FailedCode     = $failedCode
+                CodeRow        = if (Get-Variable -Name 'lineInfo' -ErrorAction SilentlyContinue) {
+                    $lineInfo
+                }
+                else {
+                    $null
+                }
+                FailedCode     = if (Get-Variable -Name 'failedCode' -ErrorAction SilentlyContinue) {
+                    $failedCode
+                }
+                else {
+                    $null
+                }
             }
             if ($PassThru.IsPresent -and $AsObject.IsPresent) {
                 $LogSentToConsole = Write-MessageToConsole
