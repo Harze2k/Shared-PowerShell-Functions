@@ -54,11 +54,12 @@ function New-Log {
     param(
         [Parameter(Position = 0, ValueFromPipeline = $true)]$Message,
         [Parameter(Position = 1)][ValidateSet("ERROR", "WARNING", "INFO", "SUCCESS", "DEBUG")][string]$Level = "INFO",
-        [Parameter(Position = 2)][switch]$NoConsole,
-        [Parameter(Position = 3)][switch]$PassThru,
-        [Parameter(Position = 4)][switch]$AsObject,
-        [Parameter(Position = 5)][switch]$ForcedLogFile,
-        [Parameter(Position = 6)][string]$LogFilePath
+        [Parameter(Position = 2)][switch]$IncludeCallerInfo = $false,
+        [Parameter(Position = 3)][switch]$NoConsole,
+        [Parameter(Position = 4)][switch]$PassThru,
+        [Parameter(Position = 5)][switch]$AsObject,
+        [Parameter(Position = 6)][switch]$ForcedLogFile,
+        [Parameter(Position = 7)][string]$LogFilePath
     )
     Begin {
         function Write-MessageToConsole {
@@ -136,7 +137,7 @@ function New-Log {
             if ($Message -isnot [string]) {
                 $Message = ($Message | Format-List | Out-String).Trim()
             }
-            if ($callerInfo.FunctionName -ne '<ScriptBlock>') {
+            if ($callerInfo.FunctionName -ne '<ScriptBlock>' -and ($IncludeCallerInfo.IsPresent -or $Level -eq "ERROR")) {
                 $functionInfo, $messageLines = if ($isPSCore) {
                     if (!($Message)) {
                         "[${blue}Function${reset}: $($callerInfo.FunctionName)]"; "$headerPrefix${_}"
