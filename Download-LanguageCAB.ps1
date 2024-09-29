@@ -61,7 +61,7 @@ function Download-LanguageCAB {
         [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$FolderPath,
         [Parameter(Mandatory)][ValidateSet("amd64")][string]$Arch,
         [Parameter(Mandatory)][ValidateSet("10", "11")][string]$Os,
-        [ValidatePattern("^\d{5}\.\d+$")][string]$Build = ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'LCUVer').LCUVer -replace "10.0.", ""),
+        [ValidatePattern("^\d{5}\.\d+$")][string]$Build = ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'CurrentBuild').CurrentBuild) + '.' + ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'UBR').UBR),
         [Parameter(Mandatory)][ValidatePattern("^[a-z]{2}-[a-z]{2}$")][string]$Language,
         [ValidateNotNullOrEmpty()][string[]]$UUPUrls = @('www.uupdump.net', 'www.uupdump.cn'),
         [switch]$ESDToCAB,
@@ -196,7 +196,6 @@ function Download-LanguageCAB {
     process {
         $lang = ($Language -split '-')[0]
         $headers = Get-RandomHeader
-        New-Log "Using build: $build" -Level DEBUG
         foreach ($UUPUrl in $UUPUrls) {
             try {
                 $WebResponse = (Invoke-WebRequest -Uri "https://$UUPUrl/known.php?q=windows+$($Os)+$($Build)" -UseBasicParsing -MaximumRedirection 1 -Method GET -Headers $headers -ErrorAction Stop).Links
