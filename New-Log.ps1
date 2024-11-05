@@ -76,6 +76,125 @@ function New-Log {
             }
             return $true
         }
+        function Set-UTF8Encoding {
+            [CmdletBinding()]
+            param()
+            function Test-IsUTF8 {
+                [CmdletBinding()]
+                param()
+                $isUTF8 = $false
+                $encodingChecks = @(
+                    {
+                        $encoding = if ([Console]::OutputEncoding) {
+                            [Console]::OutputEncoding
+                        }
+                        else {
+                            [System.Console]::OutputEncoding
+                        }
+                        $isUTF8 = $encoding -is [System.Text.UTF8Encoding] -or $encoding.WebName -eq 'utf-8' -or $encoding.CodePage -eq 65001
+                        $isUTF8
+                    },
+                    {
+                        $encoding = $OutputEncoding
+                        $isUTF8 = $encoding -is [System.Text.UTF8Encoding] -or $encoding.WebName -eq 'utf-8' -or $encoding.CodePage -eq 65001
+                        $isUTF8
+                    },
+                    {
+                        $codePage = chcp.com
+                        $isUTF8 = $codePage -match '65001' -or '65001' -eq (Get-ItemPropertyValue HKLM:\SYSTEM\CurrentControlSet\Control\Nls\CodePage OEMCP)
+                        $isUTF8
+                    }
+                )
+                foreach ($check in $encodingChecks) {
+                    try {
+                        if (& $check) {
+                            return $true
+                        }
+                    }
+                    catch {
+                        continue
+                    }
+                }
+                return $false
+            }
+            if ($null -ne $PSDefaultParameterValues) {
+                $encodingKeys = $PSDefaultParameterValues.Keys | Where-Object { $_ -like '*Encoding' }
+                if ($encodingKeys.Count -eq 0) {
+                    $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+                    $PSDefaultParameterValues['Get-Content:Encoding'] = 'utf8'
+                    $PSDefaultParameterValues['Set-Content:Encoding'] = 'utf8'
+                    Write-Verbose 'Set Out-File:Encoding, Get-Content:Encoding, Set-Content:Encoding to "utf8"'
+                }
+                elseif ($encodingKeys.Count -ge 1) {
+                    foreach ($key in $encodingKeys) {
+                        $PSDefaultParameterValues[$key] = 'utf8'
+                        Write-Verbose "Confirmed: ${key} = 'utf8' is [True]"
+                    }
+                }
+            }
+            else {
+                $PSDefaultParameterValues = @{}
+                $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+                $PSDefaultParameterValues['Get-Content:Encoding'] = 'utf8'
+                $PSDefaultParameterValues['Set-Content:Encoding'] = 'utf8'
+                Write-Verbose '$PSDefaultParameterValues was missing, created it and set Out-File:Encoding, Get-Content:Encoding, Set-Content:Encoding to "utf8"'
+            }
+            if (Test-IsUTF8 -Verbose:$VerboseParam.IsPresent) {
+                Write-Verbose "UTF-8 encoding already set"
+                return $true
+            }
+            $methods = @(
+                {
+                    [console]::InputEncoding = [console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                    $OutputEncoding = [System.Text.Encoding]::UTF8
+                },
+                {
+                    [System.Console]::InputEncoding = [System.Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+                    $OutputEncoding = New-Object System.Text.UTF8Encoding
+                },
+                {
+                    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                    $OutputEncoding = [System.Text.Encoding]::UTF8
+                },
+                {
+                    [System.Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+                    $OutputEncoding = New-Object System.Text.UTF8Encoding
+                },
+                {
+                    chcp 65001 | Out-Null
+                }
+            )
+            foreach ($method in $methods) {
+                try {
+                    & $method
+                    $methodCode = $($method.ToString().Trim('{}').Split([Environment]::NewLine).Where{ $_.Trim() }.Trim() -join ' ; ')
+                    $encodingsCorrect = (
+                        [console]::OutputEncoding.CodePage -eq 65001 -and $OutputEncoding.CodePage -eq 65001
+                    )
+                    if ($methodCode -match 'chcp 65001 | Out-Null') {
+                        Write-Verbose "Successfully set UTF-8 encoding using method: $methodCode"
+                        $encodingsCorrect = $true
+                        break
+                    }
+                    if ($encodingsCorrect) {
+                        Write-Verbose "Successfully set UTF-8 encoding using method: $methodCode"
+                        break
+                    }
+                    else {
+                        Write-Verbose "Method: $methodCode, completed but verification failed"
+                    }
+                }
+                catch {
+                    continue
+                }
+            }
+            if ($encodingsCorrect) {
+                return $true
+            }
+            else {
+                return $false
+            }
+        }
         $isPSCore = $PSVersionTable.PSVersion.Major -ge 6
         $levelColors = @{
             "ERROR"   = @{ANSI = "31"; PS = "Red" }
@@ -96,13 +215,9 @@ function New-Log {
         else {
             ""
         }
-        try {
-            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        if (!(Set-UTF8Encoding)) {
+            Write-Host "Failed to set UTF-8 encoding using any available method."
         }
-        catch {
-            Write-Host "Unable to set console encoding to UTF8" -ForegroundColor Yellow
-        }
-
     }
     Process {
         if ($null -eq $Message -and $Level -ne "ERROR") {
@@ -114,7 +229,7 @@ function New-Log {
                 $Message = New-Object -TypeName PSObject -Property $Message
             }
             if ($Message -and $Message.GetType().Name -notin @("PSCustomObject", "Hashtable", "String", "Software")) {
-                New-Log "Unsupported message type: $($Message.GetType().Name). Must be PSCustomObject, Hashtable or string" -ForegroundColor Red
+                Write-Host "Unsupported message type: $($Message.GetType().Name). Must be PSCustomObject, Hashtable or string" -ForegroundColor Red
                 return
             }
             $logSentToConsole = $false
