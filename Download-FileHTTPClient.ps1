@@ -69,12 +69,12 @@ function Download-FileHTTPClient {
     if (!($FileName)) {
         $fileName = Split-Path -Path $Url -Leaf
         if (-not $fileName -or [string]::IsNullOrEmpty([IO.Path]::GetExtension($fileName))) {
-            Write-Host "No file name provided and no filename with an extension could be extracted from the URL."
+            #Write-Host "No file name provided and no filename with an extension could be extracted from the URL."
             return
         }
     }
     if (!($HTTPClient)) {
-        Write-Host "No HTTPClient provided. Creating a new one."
+        #Write-Host "No HTTPClient provided. Creating a new one."
         $HTTPClient = [System.Net.Http.HttpClient]::new()
     }
     try {
@@ -127,7 +127,16 @@ function Download-FileHTTPClient {
         }
     }
     catch {
-        Write-Host "Error during download: $($_.Exception.Message)" -ForegroundColor Red
+        #Write-Host "Error during download: $($_.Exception.Message)" -ForegroundColor Red
+        return [pscustomobject]@{
+            "Status"       = "Failed"
+            "Error"        = $($_.Exception.Message)
+            "FileName"     = $fileName
+            "FileSize"     = $null
+            "FilePath"     = $outputFile
+            "TimeTaken"    = $null
+            "AverageSpeed" = $null
+        }
     }
     finally {
         Write-Progress -Activity "Downloading $outputFile" -Completed
