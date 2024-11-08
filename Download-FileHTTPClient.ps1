@@ -124,6 +124,7 @@ function Download-FileHTTPClient {
             "FilePath"     = $outputFile
             "TimeTaken"    = "$($stopwatch.Elapsed.ToString('mm\:ss\.fff')) (minutes:seconds.milliseconds)"
             "AverageSpeed" = "$downloadSpeedFormatted/s"
+            "URL"          = $Url
         }
     }
     catch {
@@ -136,6 +137,7 @@ function Download-FileHTTPClient {
             "FilePath"     = $outputFile
             "TimeTaken"    = $null
             "AverageSpeed" = $null
+            "URL"          = $Url
         }
     }
     finally {
