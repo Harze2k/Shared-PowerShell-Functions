@@ -1,10 +1,7 @@
 <#
 .DESCRIPTION
-The Get-RandomHeader function is a versatile utility designed to generate randomized HTTP headers for web requests in PowerShell scripts. It creates a set of headers that mimic real browser behavior, helping to avoid detection as an automated script. The function supports various use cases, including generating headers for direct use, or creating pre-configured WebClient or HttpClient objects.
+The Get-RandomHeader function is a versatile utility designed to generate randomized HTTP headers for web requests in PowerShell scripts. It creates a set of headers that mimic real browser behavior, helping to avoid detection as an automated script. The function supports various use cases, including generating headers for direct use, or creating pre-configured HttpClient object.
 The function attempts to determine the user's country code using an IP geolocation service, falling back to a random country if the service is unavailable. It then uses this information to set appropriate language headers. The function generates a wide variety of realistic user agents, referrers, and other HTTP headers to simulate different browsers and devices.
-
-.PARAMETER GetWebClient
--GetWebClient: When specified, returns a System.Net.WebClient object with the random headers pre-configured.
 
 .PARAMETER GetHTTPClient
 -GetHTTPClient: When specified, returns a System.Net.Http.HttpClient object with the random headers pre-configured.
@@ -14,10 +11,7 @@ Example 1: Get a hashtable of random headers
 $header = Get-RandomHeader
 $header # Is compatible with Invoke-RestMethod and Invoke-WebRequest.
 
-Example 2: Get a pre-configured WebClient object
-$webClient = Get-RandomHeader -GetWebClient
-
-Example 3: Get a pre-configured HttpClient object
+Example 2: Get a pre-configured HttpClient object
 $httpClient = Get-RandomHeader -GetHTTPClient
 
 .NOTES
@@ -28,7 +22,6 @@ This function is particularly useful for web scraping tasks, API interactions, o
 function Get-RandomHeader {
     [CmdletBinding()]
     param (
-        [switch]$GetWebClient,
         [switch]$GetHTTPClient
     )
     try {
@@ -95,41 +88,27 @@ function Get-RandomHeader {
         'en-US,en;q=0.5'
     }
     $Header = @{
-        'User-Agent'                = $userAgents | Get-Random
-        'Accept'                    = (Get-Random -InputObject @(
-                'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-                'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-                'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
+        'User-Agent'      = $userAgents | Get-Random
+        'Accept'          = (Get-Random -InputObject @(
+                'text/html,application/xhtml+xml,application/xml,application/json;q=0.9,image/webp,*/*;q=0.8',
+                'text/html,application/xhtml+xml,application/xml,application/json;q=0.9,image/webp,image/apng,*/*;q=0.8',
+                'text/html,application/xhtml+xml,application/xml,application/json;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+                'text/html,application/xhtml+xml,application/xml,application/json;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
             ))
-        'Accept-Language'           = $acceptLanguage
-        'Accept-Encoding'           = (Get-Random -InputObject @(
-                'gzip, deflate',
-                'gzip, deflate, br',
-                'br, gzip, deflate'
-            ))
-        'DNT'                       = (Get-Random -InputObject @('0', '1'))
-        'Upgrade-Insecure-Requests' = '1'
-        'Sec-Fetch-Dest'            = 'document'
-        'Sec-Fetch-Mode'            = 'navigate'
-        'Sec-Fetch-Site'            = (Get-Random -InputObject @('none', 'same-origin', 'same-site', 'cross-site'))
-        'Sec-Fetch-User'            = '?1'
-        'Referer'                   = $referrer | Get-Random
+        'Accept-Language' = $acceptLanguage
+        'Referer'         = $referrer | Get-Random
     }
     try {
-        if ($GetWebClient) {
-            $webClient = [System.Net.WebClient]::new()
+        if ($GetHTTPClient) {
+            Add-Type -AssemblyName System.Net.Http -ErrorAction SilentlyContinue
+            $clientName = "HTTPClient" + (Get-Random -Minimum 100 -Maximum 999)
+            Set-Variable -Name $clientName -Value ([System.Net.Http.HttpClient]::new())
             foreach ($key in $Header.Keys) {
-                $webClient.Headers.Add($key, $Header[$key])
+                Write-Verbose -Message "Adding $key : $($Header[$key]) to $clientName"
+                (Get-Variable -Name $clientName -ValueOnly).DefaultRequestHeaders.Add($key, $Header[$key])
             }
-            return $webClient
-        }
-        elseif ($GetHTTPClient) {
-            $httpClient = [System.Net.Http.HttpClient]::new()
-            foreach ($key in $Header.Keys) {
-                $httpClient.DefaultRequestHeaders.Add($key, $Header[$key])
-            }
-            return $httpClient
+            Write-Verbose -Message "Returned HTTPClient named: $clientName"
+            return Get-Variable -Name $clientName -ValueOnly
         }
         else {
             return $Header
