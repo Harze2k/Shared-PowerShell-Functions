@@ -129,7 +129,7 @@ function Download-FileHTTPClient {
     catch {
         #Write-Host "Error during download: $($_.Exception.Message)" -ForegroundColor Red
         return [pscustomobject]@{
-            "Status"       = "Failed"
+            "Status"       = "Failed Download"
             "Error"        = $($_.Exception.Message)
             "FileName"     = $fileName
             "FileSize"     = $null
