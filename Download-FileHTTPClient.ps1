@@ -116,7 +116,7 @@ function Download-FileHTTPClient {
         }
         $downloadSpeed = ($totalLength / $elapsedSeconds)
         $downloadSpeedFormatted = Format-FileSize -Bytes $downloadSpeed
-        Write-Host "Downloaded $outputFile successfully" -ForegroundColor Green
+        #Write-Host "Downloaded $outputFile successfully" -ForegroundColor Green
         return [pscustomobject]@{
             "Status"       = "Completed"
             "FileName"     = $fileName
