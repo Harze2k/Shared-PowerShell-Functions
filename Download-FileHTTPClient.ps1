@@ -72,9 +72,6 @@ function Download-FileHTTPClient {
             Write-Host "No file name provided and no filename with an extension could be extracted from the URL."
             return
         }
-        else {
-            Write-Host "Parsed filename: $fileName from $url"
-        }
     }
     if (!($HTTPClient)) {
         Write-Host "No HTTPClient provided. Creating a new one."
@@ -92,7 +89,7 @@ function Download-FileHTTPClient {
         if ($VerbosePreference) {
             $bufferSize | Format-List | Out-Host
         }
-        Write-Host "Starting download of $fileName (Total size: $totalLengthFormatted) using a buffer size of $($bufferSize.FinalBufferSizeFormatted)" -ForegroundColor Cyan
+        #Write-Host "Starting download of $fileName (Total size: $totalLengthFormatted) using a buffer size of $($bufferSize.FinalBufferSizeFormatted)" -ForegroundColor Cyan
         $buffer = New-Object byte[] $bufferSize.FinalBufferSize
         $totalBytesRead = 0
         $lastProgressTime = Get-Date
