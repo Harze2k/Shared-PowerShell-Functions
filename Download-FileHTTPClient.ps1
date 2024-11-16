@@ -69,12 +69,11 @@ function Download-FileHTTPClient {
     if (!($FileName)) {
         $fileName = Split-Path -Path $Url -Leaf
         if (-not $fileName -or [string]::IsNullOrEmpty([IO.Path]::GetExtension($fileName))) {
-            #Write-Host "No file name provided and no filename with an extension could be extracted from the URL."
+            Write-Host "No file name provided and no filename with an extension could be extracted from the URL."
             return
         }
     }
     if (!($HTTPClient)) {
-        #Write-Host "No HTTPClient provided. Creating a new one."
         $HTTPClient = [System.Net.Http.HttpClient]::new()
     }
     try {
@@ -89,11 +88,11 @@ function Download-FileHTTPClient {
         if ($VerbosePreference) {
             $bufferSize | Format-List | Out-Host
         }
-        #Write-Host "Starting download of $fileName (Total size: $totalLengthFormatted) using a buffer size of $($bufferSize.FinalBufferSizeFormatted)" -ForegroundColor Cyan
+        Write-Verbose "Starting download of $fileName (Total size: $totalLengthFormatted) using a buffer size of $($bufferSize.FinalBufferSizeFormatted)"
         $buffer = New-Object byte[] $bufferSize.FinalBufferSize
         $totalBytesRead = 0
         $lastProgressTime = Get-Date
-        $progressUpdateInterval = [TimeSpan]::FromMilliseconds(1000) # Update every 1000ms
+        $progressUpdateInterval = [TimeSpan]::FromMilliseconds(1000)
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         while (($bytesRead = $contentStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
             $fileStream.Write($buffer, 0, $bytesRead)
@@ -116,7 +115,7 @@ function Download-FileHTTPClient {
         }
         $downloadSpeed = ($totalLength / $elapsedSeconds)
         $downloadSpeedFormatted = Format-FileSize -Bytes $downloadSpeed
-        #Write-Host "Downloaded $outputFile successfully" -ForegroundColor Green
+        Write-Verbose "Downloaded $outputFile successfully" -ForegroundColor Green
         return [pscustomobject]@{
             "Status"       = "Completed"
             "FileName"     = $fileName
@@ -128,7 +127,7 @@ function Download-FileHTTPClient {
         }
     }
     catch {
-        #Write-Host "Error during download: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Error during download: $($_.Exception.Message)" -ForegroundColor Red
         return [pscustomobject]@{
             "Status"       = "Failed Download"
             "Error"        = $($_.Exception.Message)
