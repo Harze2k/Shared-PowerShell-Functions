@@ -52,7 +52,7 @@ $returnedObject = $customMessage | New-Log -Level "INFO" -PassThru -AsObject
 function New-Log {
     [CmdletBinding()]
     param(
-        [Parameter(Position = 0, ValueFromPipeline = $true)]$Message,
+        [Parameter(Position = 0, ValueFromPipeline)]$Message,
         [Parameter(Position = 1)][ValidateSet("ERROR", "WARNING", "INFO", "SUCCESS", "DEBUG")][string]$Level = "INFO",
         [Parameter(Position = 2)][switch]$IncludeCallerInfo = $false,
         [Parameter(Position = 3)][switch]$NoConsole,
@@ -226,7 +226,7 @@ function New-Log {
         try {
             @('exceptionMessage', 'failedCode', 'scriptLines', 'lineInfo') | ForEach-Object { Set-Variable -Name $_ -Value $null }
             if ($Message -and $Message.GetType().Name -eq 'Hashtable') {
-                $Message = New-Object -TypeName PSObject -Property $Message
+                [pscustomobject]$message = $Message
             }
             if ($Message -and $Message.GetType().Name -notin @("PSCustomObject", "Hashtable", "String", "Software")) {
                 Write-Host "Unsupported message type: $($Message.GetType().Name). Must be PSCustomObject, Hashtable or string" -ForegroundColor Red

@@ -1,18 +1,18 @@
 function Download-FileHTTPClient {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][string]$Url,
-        [Parameter(Mandatory = $false)][string]$FileName,
-        [Parameter(Mandatory = $true)][string]$FilePath,
-        [Parameter(Mandatory = $false)]$HTTPClient,
-        [Parameter(Mandatory = $false)][int]$BufferFactor = 2, # Use 2 when speed is ~100/mbit. Use 3-5 when speed is ~1000/mbit.
+        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][string]$FileName,
+        [Parameter(Mandatory)][string]$FilePath,
+        [Parameter(Mandatory)]$HTTPClient,
+        [Parameter(Mandatory)][int]$BufferFactor = 2, # Use 2 when speed is ~100/mbit. Use 3-5 when speed is ~1000/mbit.
         [switch]$DisposeClient
     )
     function Get-OptimalBufferSize {
         [CmdletBinding()]
         param (
-            [Parameter(Mandatory = $true)][long]$FileSize,
-            [Parameter(Mandatory = $false)][int]$BufferFactor = 2 # Use 2 when speed is ~100/mbit. Use 3-5 when speed is ~1000/mbit.
+            [Parameter(Mandatory)][long]$FileSize,
+            [Parameter(Mandatory)][int]$BufferFactor = 2 # Use 2 when speed is ~100/mbit. Use 3-5 when speed is ~1000/mbit.
         )
         $availableMemory = (Get-CimInstance Win32_OperatingSystem -Verbose:$false).FreePhysicalMemory * 1KB
         $maxBuffer = [Math]::Min(($availableMemory * 0.01), 8MB)
@@ -58,7 +58,7 @@ function Download-FileHTTPClient {
     }
     function Format-FileSize {
         param (
-            [Parameter(Mandatory = $true)][long]$Bytes
+            [Parameter(Mandatory)][long]$Bytes
         )
         $sizes = 'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'
         $index = [Math]::Floor([Math]::Log($bytes, 1000))

@@ -2,23 +2,17 @@
 .DESCRIPTION
 The Test-DNSServers function is a PowerShell tool designed to evaluate and compare the performance of multiple DNS servers in resolving specified websites. It conducts a series of DNS resolution tests for each combination of website and DNS server, calculates average response times, and provides a comprehensive performance analysis.
 This function is particularly useful for:
-
 Network administrators optimizing DNS configurations
 Developers troubleshooting DNS-related performance issues
 Users seeking to identify the fastest DNS servers for their frequently visited websites
-
 .PARAMETER Websites
 -Websites: Accepts an array of websites to test.
-
 .PARAMETER TestsCount
 -TestsCount: Accepts the number of DNS resolution tests to conduct for each combination of website and DNS server.
-
 .PARAMETER DNSServers
 -DNSServers: Accepts a hashtable of DNS servers and their respective IP addresses. The default is Google, Google2, Cloudflare, Cloudflare2, Quad9, Quad92, CleanBrowsing, and CleanBrowsing2.
-
 .EXAMPLE
 Test-DNSServers -Websites @('reddit.com', 'youtube.com', 'github.com', 'microsoft.com') -TestsCount 20
-
 .OUTPUTS
 Top 3 Overall DNS Providers:
 Gold: Quad92 - Average Response Time: 2.265145 ms
@@ -28,10 +22,9 @@ Bronze: Cloudflare2 - Average Response Time: 2.9119 ms
 function Test-DNSServers {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)][string[]]$Websites,
-        [Parameter(Mandatory = $true)][int]$TestsCount,
-        [Parameter(Mandatory = $false)]
-        [hashtable]$DNSServers = @{
+        [Parameter(Mandatory)][string[]]$Websites,
+        [Parameter(Mandatory)][int]$TestsCount,
+        [Parameter(Mandatory)][hashtable]$DNSServers = @{
             'Google'         = '8.8.8.8'
             'Google2'        = '8.8.4.4'
             'Cloudflare'     = '1.1.1.1'

@@ -6,60 +6,42 @@ It supports downloading language-specific CAB files for Windows 10 or 11.
 The function can retrieve files from multiple UUP dump sites, convert ESD files to CAB format, and optionally remove original ESD files.
 It uses random user agents and headers to avoid detection as a bot.
 The function also handles the download and setup of necessary conversion tools (imagex, cabarc, SxSExpand) if they are not already present.
-
 ###############################################################################################################################
 #REQUIRES custom logging function from: https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1#
 ###############################################################################################################################
-
 #################################################################################################################################################
 #REQUIRES custom Get-RandomHeader function from: https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/Get-RandomHeader.ps1#
 #################################################################################################################################################
-
 .PARAMETER FolderPath
 -FolderPath: Specifies the directory where the downloaded files will be saved. This parameter is mandatory.
-
-.PARAMETER Arch
--Arch: Defines the processor architecture for which to download the language files. This parameter is mandatory and accepts only "amd64" for now.
-
 .PARAMETER Os
 -Os: Specifies the Windows version for which to download the language files. This parameter is mandatory and accepts either "10" or "11".
-
 .PARAMETER Build
 -Build: Allows specification of a particular Windows build number for which to download language files. If not provided, it defaults to the current system's LCU version. The build number should match the pattern ^\d{5}\.\d+$.
-
 .PARAMETER Language
 -Language: Defines the language code for which to download files. This parameter is mandatory and should be in the format of two lowercase letters, a hyphen, and two more lowercase letters (e.g., "en-us" for English-US).
-
 .PARAMETER UUPUrls
 -UUPUrls: An optional array of strings representing the URLs of UUP dump sites to use for downloading. It defaults to @('www.uupdump.net', 'www.uupdump.cn').
-
 .PARAMETER ESDToCAB
 -ESDToCAB: A switch parameter that, when specified, triggers the conversion of downloaded ESD files to CAB format.
-
 .PARAMETER RemoveESD
 -RemoveESD: A switch parameter that, when specified along with ESDToCAB, removes the original ESD files after successful conversion to CAB.
-
 .EXAMPLE
 Example 1: Download language files for Windows 11 (amd64)
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Arch "amd64" -Os "11" -Language "en-us"
-
+Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "11" -Language "en-us"
 Example 2: Download and convert ESD files to CAB for Windows 11
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Arch "amd64" -Os "11" -Language "de-de" -ESDToCAB
-
+Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "11" -Language "de-de" -ESDToCAB
 Example 3: Download, convert to CAB, and remove original ESD files
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Arch "amd64" -Os "10" -Language "ja-jp" -ESDToCAB -RemoveESD
-
+Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "10" -Language "ja-jp" -ESDToCAB -RemoveESD
 Example 4: Use a custom UUP dump site for downloading
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Arch "amd64" -Os "11" -Language "es-es" -UUPUrls @('custom.uupdump.site')
-
+Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "11" -Language "es-es" -UUPUrls @('custom.uupdump.site')
 Example 5: Use a custom UUP dump site for downloading and specified build.
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Build "26100.994" -Arch "amd64" -Os "11" -Language "es-es" -UUPUrls @('custom.uupdump.site')
+Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Build "26100.994" -Os "11" -Language "es-es" -UUPUrls @('custom.uupdump.site')
 #>
 function Download-LanguageCAB {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$FolderPath,
-        [Parameter(Mandatory)][ValidateSet("amd64")][string]$Arch,
+        [Parameter(Mandatory, ValueFromPipeline)][ValidateNotNullOrEmpty()][string]$FolderPath,
         [Parameter(Mandatory)][ValidateSet("10", "11")][string]$Os,
         [ValidatePattern("^\d{5}\.\d+$")][string]$Build = ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'CurrentBuild').CurrentBuild) + '.' + ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'UBR').UBR),
         [Parameter(Mandatory)][ValidatePattern("^[a-z]{2}-[a-z]{2}$")][string]$Language,
@@ -73,7 +55,7 @@ function Download-LanguageCAB {
             param (
                 [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$DownloadLink,
                 [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$OutputFile,
-                [Parameter(Mandatory = $false)][string]$FileName
+                [Parameter(Mandatory)][string]$FileName
             )
             if ([string]::IsNullOrEmpty($fileName)) {
                 [string]$fileName = $(Split-Path $outputFile -Leaf)
@@ -306,3 +288,6 @@ function Download-LanguageCAB {
         }
     }
 }
+$currentBuild = ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'CurrentBuild').CurrentBuild) + '.' + ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'UBR').UBR)
+#$build = '26100.2314'
+Download-LanguageCAB -FolderPath "C:\Temp\LanguageCAB" -Os "11" -Language "sv-se" -RemoveESD -ESDToCAB -UUPUrls @('www.uupdump.net', 'www.uupdump.cn') -Build $currentBuild
