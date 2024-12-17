@@ -119,9 +119,12 @@ function New-CustomTask {
         Break
     }
 }
-$trigHighPrio = New-CustomTrigger -ExecutionTimeLimit 6 -StartYear 2023 -StartMonth 10 -EndYear 2026 -EndMonth 12 -StartTime 23 -OffsetHours 3 -OffsetDays 2
-$trigRestartCheckHighPrioServers = New-CustomTrigger -ExecutionTimeLimit 2 -StartYear 2023 -StartMonth 10 -EndYear 2026 -EndMonth 12 -StartTime 23 -OffsetHours 7 -OffsetDays 2
-$trigAnalyzeHighPrio = New-CustomTrigger -ExecutionTimeLimit 2 -StartYear 2023 -StartMonth 10 -EndYear 2026 -EndMonth 12 -OffsetDays 3 -OffsetHours -8
+$trigHighPrio = New-CustomTrigger -ExecutionTimeLimit 6 -StartYear (Get-Date).Year -StartMonth (Get-Date).Month -EndYear 2026 -EndMonth 12 -StartTime 23 -OffsetHours 3 -OffsetDays 2
+$trigRestartCheckHighPrioServers = New-CustomTrigger -ExecutionTimeLimit 2 -StartYear (Get-Date).Year -StartMonth (Get-Date).Month -EndYear 2026 -EndMonth 12 -StartTime 23 -OffsetHours 7 -OffsetDays 2
+$trigAnalyzeHighPrio = New-CustomTrigger -ExecutionTimeLimit 2 -StartYear (Get-Date).Year -StartMonth (Get-Date).Month -EndYear 2026 -EndMonth 12 -OffsetDays 3 -OffsetHours -8
 New-CustomTask -TaskName 'PatchTuesdayHighPrioServers' -Triggers $trigHighPrio -ExecutionTimeLimit 6 -EndAndRemove -ScriptRunner 'internal\SVC_MEMCM_CP' -Executable 'pwsh.exe' -Arguments '-WindowStyle Hidden -NoProfile -ExecutionPolicy bypass -file "E:\Program Files\WindowsUpdateForServers\Scripts\RunWUonServersandReportBack_v1.4_HighPrioServers.ps1" -Wait'
 New-CustomTask -TaskName 'RestartCheckHighPrioServers' -Triggers $trigRestartCheckHighPrioServers -ExecutionTimeLimit 2 -EndAndRemove -ScriptRunner 'internal\SVC_MEMCM_CP' -Executable 'pwsh.exe' -Arguments '-WindowStyle Hidden -NoProfile -ExecutionPolicy bypass -file "E:\Program Files\WindowsUpdateForServers\Scripts\RestartCheck_HighPrioServers_v1.0.ps1" -Wait'
 New-CustomTask -TaskName 'AnalyzeWUResultHighPrioServers' -Triggers $trigAnalyzeHighPrio -ExecutionTimeLimit 3 -EndAndRemove -ScriptRunner 'internal\SVC_MEMCM_CP' -Executable 'pwsh.exe' -Arguments '-WindowStyle Hidden -NoProfile -ExecutionPolicy bypass -file "E:\Program Files\WindowsUpdateForServers\Scripts\WindowsUpdateReport_v1.4_HighPrioServers.ps1" -Wait'
+$trigHighPrio | ForEach-Object {
+    Write-Host "Date for patch tuseday with custom offset: $($_.StartBoundary)"
+}
