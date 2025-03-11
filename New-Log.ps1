@@ -1,412 +1,271 @@
 <#
+.SYNOPSIS
+    Writes a log entry to the console and/or to a log file, with optional formatting and error information.
 .DESCRIPTION
-The New-Log function is a versatile logging utility designed to provide detailed logs with customizable formatting for PowerShell scripts.
-It supports logging messages of different severity levels, including ERROR, WARNING, INFO, SUCCESS, and DEBUG.
-The function also handles different PowerShell versions, including PowerShell Core (6 and above), and adjusts the console output for color-coded messages based on the severity level.
-Additionally, it provides detailed information for ERROR logs, including the script line number, function name, and the exact code that failed, enhancing the debugging process.
+    The New-Log function allows you to write log entries at various levels (ERROR, WARNING, INFO, SUCCESS, DEBUG, VERBOSE).
+    You can pass any type of message: string, hashtable, PSCustomObject, or even ErrorRecord objects. The function can:
+    - Display logs in the console with color-coding for different log levels.
+    - Write logs to a file, with optional file rotation based on size.
+    - Output logs in JSON or plain-text format.
+    - Create a new log file with a timestamp appended to its name.
+    - Overwrite an existing file if desired (ForcedLogFile).
+    - Return the log entry as an object for further processing.
+    - Skip console output completely if needed.
 .PARAMETER Message
--Message: Accepts the log message, which can be a string, hashtable, or PSCustomObject.
+    The main content of your log entry. Can be a string, hashtable, PSCustomObject, or ErrorRecord.
 .PARAMETER Level
--Level: Specifies the severity level of the log message, defaulting to INFO.
+    Specifies the severity or type of message to log.
+    Valid options: ERROR, WARNING, INFO, SUCCESS, DEBUG, VERBOSE.
+    Default is INFO.
 .PARAMETER NoConsole
--NoConsole: Suppresses console output if specified, useful for silent logging.
-.PARAMETER PassThru
--PassThru: Returns the formatted log message as a string instead of writing it to the console or file.
-.PARAMETER AsObject
--AsObject: Returns the log entry as a PSCustomObject, which can be useful for further processing or outputting structured data.
-.PARAMETER ForcedLogFile
--ForcedLogFile: Overwrites the existing log file with the new log entry if specified, otherwise appends to the log file.
+    If set, no output is written to the console.
+.PARAMETER ReturnObject
+    If set, returns the constructed log object instead of writing nothing or just logging to file/console.
 .PARAMETER LogFilePath
--LogFilePath: Specifies the path to the log file where the message should be written. If the directory does not exist, it is created automatically.
+    Specifies the full path to the log file. If not provided, logs will only appear in the console (unless NoConsole is set).
+.PARAMETER ForcedLogFile
+    If set, overwrites the entire log file instead of appending.
+.PARAMETER AppendTimestampToFile
+    If set, appends a timestamp to the log file name before writing.
+    For example, LogFilePath "C:\Logs\MyLog.txt" might become "C:\Logs\MyLog_20250225_153000.txt".
+.PARAMETER LogRotationSizeMB
+    When specified with a nonzero value, checks the size of the current log file and renames (rotates) it if it exceeds the size in MB.
+.PARAMETER LogFormat
+    Controls how the log message is written to the file. Accepts "TEXT" (default) or "JSON".
 .EXAMPLE
-Example 1: Log an informational message to the console
-New-Log -Message "The process completed successfully." -Level "INFO"
-Example 2: Log an error message to a log file. These messeges are standard:
-Timestamp      : 2024-08-16 09:56:02.178
-Level          : ERROR
-Message        : A critical error occurred in the script.
-Exception      : Cannot find path 'C:\ttmm' because it does not exist.
-CallerFunction : <Name of function used>
-CodeRow        : (2,433) (Function,Script)
-FailedCode     : Get-ChildItem -Path C:\ttmm -ErrorAction Stop
-try {
-    Get-ChildItem -Path C:\ttmm -ErrorAction Stop
-}
-catch {
-    New-Log -Message "A critical error occurred in the script." -Level "ERROR" -LogFilePath "C:\Logs\error.log"
-}
-Example 3: Log a debug message without console output but returning the log as a string
-$logEntry = New-Log -Message "Debugging the script." -Level "DEBUG" -NoConsole -PassThru
-Example 4: Log a success message and return it as a PSCustomObject for further processing
-$logObject = New-Log -Message "Operation completed successfully." -Level "SUCCESS" -AsObject
-Example 5: Overwrite the existing log file with a warning message
-New-Log -Message "This will overwrite the log file." -Level "WARNING" -LogFilePath "C:\Logs\warning.log" -ForcedLogFile
-Example 6: Log a message with a PSCustomObject and output it both to the console and as a PSCustomObject
-$customMessage = [PSCustomObject]@{
-    UserName = "Admin"
-    Action   = "Login"
-    Status   = "Success"
-}
-$returnedObject = $customMessage | New-Log -Level "INFO" -PassThru -AsObject
+    # Simple usage (INFO level by default):
+    New-Log "This is a test message"
+.EXAMPLE
+    # Log an ERROR. If an ErrorRecord is passed, exception details are included automatically:
+    try {
+        1/0
+    }
+    catch {
+        New-Log $_ -Level ERROR
+    }
+.EXAMPLE
+    # Write a WARNING to a file and the console:
+    New-Log "This will go to the log file" -Level WARNING -LogFilePath "C:\Logs\ExampleLog.txt"
+.EXAMPLE
+    # Overwrite the file each time (-ForcedLogFile) and return the log object (-ReturnObject):
+    $logEntry = New-Log "Overwriting file with a new entry" -Level INFO -ForcedLogFile -LogFilePath "C:\Logs\Overwrite.txt" -ReturnObject
+    # $logEntry now holds the PSCustomObject with all log details.
+.EXAMPLE
+    # Append a timestamp to the log file name:
+    New-Log "Log with time-based filename" -Level DEBUG -LogFilePath "C:\Logs\DailyLog.txt" -AppendTimestampToFile
+.EXAMPLE
+    # Skip console output and only write JSON logs to file:
+    New-Log "Background log entry" -Level VERBOSE -NoConsole -LogFilePath "C:\Logs\MyLog.json" -LogFormat JSON
+.NOTES
+    Written for Windows PowerShell 5.1 or newer. Automatically handles console color adjustments.
+    If running on PowerShell 7 or newer, advanced ANSI coloring is used for console messages.
 #>
 function New-Log {
     [CmdletBinding()]
     param(
-        [Parameter(Position = 0, ValueFromPipeline)]$Message,
-        [Parameter(Position = 1)][ValidateSet("ERROR", "WARNING", "INFO", "SUCCESS", "DEBUG")][string]$Level = "INFO",
-        [Parameter(Position = 2)][switch]$IncludeCallerInfo = $false,
-        [Parameter(Position = 3)][switch]$NoConsole,
-        [Parameter(Position = 4)][switch]$PassThru,
-        [Parameter(Position = 5)][switch]$AsObject,
-        [Parameter(Position = 6)][switch]$ForcedLogFile,
-        [Parameter(Position = 7)][string]$LogFilePath
+        [Parameter(ValueFromPipeline, Position = 0)]$Message,
+        [Parameter(Position = 1)][ValidateSet("ERROR", "WARNING", "INFO", "SUCCESS", "DEBUG", "VERBOSE")][string]$Level = "INFO",
+        [Parameter(Position = 2)][switch]$NoConsole,
+        [Parameter(Position = 3)][switch]$ReturnObject,
+        [Parameter(Position = 4)][string]$LogFilePath,
+        [Parameter(Position = 5)][switch]$ForcedLogFile,
+        [Parameter(Position = 6)][switch]$AppendTimestampToFile,
+        [Parameter(Position = 7)][int]$LogRotationSizeMB = 0,
+        [Parameter(Position = 8)][ValidateSet("TEXT", "JSON")][string]$LogFormat = "TEXT"
     )
     Begin {
-        function Write-MessageToConsole {
-            if ($LogSentToConsole -eq $true) {
-                return
-            }
-            if (!($NoConsole.IsPresent)) {
-                if ($isPSCore) {
-                    Write-Host $logMessage
-                }
-                else {
-                    $logMessage | ForEach-Object { Write-Host $_ -ForegroundColor $levelColors[$Level].PS }
-                }
-            }
-            return $true
-        }
-        function Set-UTF8Encoding {
-            [CmdletBinding()]
-            param()
-            function Test-IsUTF8 {
-                [CmdletBinding()]
-                param()
-                $isUTF8 = $false
-                $encodingChecks = @(
-                    {
-                        $encoding = if ([Console]::OutputEncoding) {
-                            [Console]::OutputEncoding
-                        }
-                        else {
-                            [System.Console]::OutputEncoding
-                        }
-                        $isUTF8 = $encoding -is [System.Text.UTF8Encoding] -or $encoding.WebName -eq 'utf-8' -or $encoding.CodePage -eq 65001
-                        $isUTF8
-                    },
-                    {
-                        $encoding = $OutputEncoding
-                        $isUTF8 = $encoding -is [System.Text.UTF8Encoding] -or $encoding.WebName -eq 'utf-8' -or $encoding.CodePage -eq 65001
-                        $isUTF8
-                    },
-                    {
-                        $codePage = chcp.com
-                        $isUTF8 = $codePage -match '65001' -or '65001' -eq (Get-ItemPropertyValue HKLM:\SYSTEM\CurrentControlSet\Control\Nls\CodePage OEMCP)
-                        $isUTF8
-                    }
-                )
-                foreach ($check in $encodingChecks) {
-                    try {
-                        if (& $check) {
-                            return $true
-                        }
-                    }
-                    catch {
-                        continue
-                    }
-                }
-                return $false
-            }
-            if ($null -ne $PSDefaultParameterValues) {
-                $encodingKeys = $PSDefaultParameterValues.Keys | Where-Object { $_ -like '*Encoding' }
-                if ($encodingKeys.Count -eq 0) {
-                    $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-                    $PSDefaultParameterValues['Get-Content:Encoding'] = 'utf8'
-                    $PSDefaultParameterValues['Set-Content:Encoding'] = 'utf8'
-                    Write-Verbose 'Set Out-File:Encoding, Get-Content:Encoding, Set-Content:Encoding to "utf8"'
-                }
-                elseif ($encodingKeys.Count -ge 1) {
-                    foreach ($key in $encodingKeys) {
-                        $PSDefaultParameterValues[$key] = 'utf8'
-                        Write-Verbose "Confirmed: ${key} = 'utf8' is [True]"
-                    }
-                }
-            }
-            else {
-                $PSDefaultParameterValues = @{}
-                $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-                $PSDefaultParameterValues['Get-Content:Encoding'] = 'utf8'
-                $PSDefaultParameterValues['Set-Content:Encoding'] = 'utf8'
-                Write-Verbose '$PSDefaultParameterValues was missing, created it and set Out-File:Encoding, Get-Content:Encoding, Set-Content:Encoding to "utf8"'
-            }
-            if (Test-IsUTF8 -Verbose:$VerboseParam.IsPresent) {
-                Write-Verbose "UTF-8 encoding already set"
-                return $true
-            }
-            $methods = @(
-                {
-                    [console]::InputEncoding = [console]::OutputEncoding = [System.Text.Encoding]::UTF8
-                    $OutputEncoding = [System.Text.Encoding]::UTF8
-                },
-                {
-                    [System.Console]::InputEncoding = [System.Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
-                    $OutputEncoding = New-Object System.Text.UTF8Encoding
-                },
-                {
-                    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-                    $OutputEncoding = [System.Text.Encoding]::UTF8
-                },
-                {
-                    [System.Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
-                    $OutputEncoding = New-Object System.Text.UTF8Encoding
-                },
-                {
-                    chcp 65001 | Out-Null
-                }
-            )
-            foreach ($method in $methods) {
-                try {
-                    & $method
-                    $methodCode = $($method.ToString().Trim('{}').Split([Environment]::NewLine).Where{ $_.Trim() }.Trim() -join ' ; ')
-                    $encodingsCorrect = (
-                        [console]::OutputEncoding.CodePage -eq 65001 -and $OutputEncoding.CodePage -eq 65001
-                    )
-                    if ($methodCode -match 'chcp 65001 | Out-Null') {
-                        Write-Verbose "Successfully set UTF-8 encoding using method: $methodCode"
-                        $encodingsCorrect = $true
-                        break
-                    }
-                    if ($encodingsCorrect) {
-                        Write-Verbose "Successfully set UTF-8 encoding using method: $methodCode"
-                        break
-                    }
-                    else {
-                        Write-Verbose "Method: $methodCode, completed but verification failed"
-                    }
-                }
-                catch {
-                    continue
-                }
-            }
-            if ($encodingsCorrect) {
-                return $true
-            }
-            else {
-                return $false
-            }
-        }
-        $isPSCore = $PSVersionTable.PSVersion.Major -ge 6
+        $script:isPSCore = $PSVersionTable.PSVersion.Major -ge 6
         $levelColors = @{
-            "ERROR"   = @{ANSI = "31"; PS = "Red" }
-            "WARNING" = @{ANSI = "33"; PS = "Yellow" }
-            "SUCCESS" = @{ANSI = "32"; PS = "Green" }
-            "DEBUG"   = @{ANSI = "34"; PS = "Blue" }
-            "INFO"    = @{ANSI = "37"; PS = "White" }
+            ERROR   = @{ ANSI = 91; PS = 'Red' }
+            WARNING = @{ ANSI = 93; PS = 'Yellow' }
+            INFO    = @{ ANSI = 37; PS = 'White' }
+            SUCCESS = @{ ANSI = 92; PS = 'Green' }
+            DEBUG   = @{ ANSI = 94; PS = 'Blue' }
+            VERBOSE = @{ ANSI = 96; PS = 'Cyan' }
         }
-        $reset = if ($isPSCore) {
-            "`e[0m"
-        }
-        else {
-            ""
-        }
-        $blue = if ($isPSCore) {
-            "`e[34m"
-        }
-        else {
-            ""
-        }
-        if (!(Set-UTF8Encoding)) {
-            Write-Host "Failed to set UTF-8 encoding using any available method."
-        }
-    }
-    Process {
-        if ($null -eq $Message -and $Level -ne "ERROR") {
-            return
-        }
+        $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $true
         try {
-            @('exceptionMessage', 'failedCode', 'scriptLines', 'lineInfo') | ForEach-Object { Set-Variable -Name $_ -Value $null }
-            if ($Message -and $Message.GetType().Name -eq 'Hashtable') {
-                [pscustomobject]$message = $Message
-            }
-            if ($Message -and $Message.GetType().Name -notin @("PSCustomObject", "Hashtable", "String", "Software")) {
-                Write-Host "Unsupported message type: $($Message.GetType().Name). Must be PSCustomObject, Hashtable or string" -ForegroundColor Red
-                return
-            }
-            $logSentToConsole = $false
-            $logMessage = ''
-            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
-            $callerInfo = (Get-PSCallStack)[1]
-            $originalMessage = $Message
-            $levelColor = if ($isPSCore) {
-                $levelColors[$Level].ANSI
+            if ($script:isPSCore) {
+                $originalEncoding = [Console]::OutputEncoding
+                [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
             }
             else {
-                $levelColors[$Level].PS
-            }
-            $headerPrefix = if ($isPSCore) {
-                "$reset[$blue$timestamp$reset][`e[$($levelColor)m$Level$reset]"
-            }
-            else {
-                "[$timestamp][$Level]"
-            }
-            if ($Message -isnot [string]) {
-                $Message = ($Message | Format-List | Out-String).Trim()
-            }
-            if ($callerInfo.FunctionName -ne '<ScriptBlock>' -and ($IncludeCallerInfo.IsPresent -or $Level -eq "ERROR")) {
-                $functionInfo, $messageLines = if ($isPSCore) {
-                    if (!($Message)) {
-                        "[${blue}Function${reset}: $($callerInfo.FunctionName)]"; "$headerPrefix${_}"
-                    }
-                    else {
-                        " [${blue}Function${reset}: $($callerInfo.FunctionName)]"; $Message -split "`n" | ForEach-Object { "$headerPrefix $_" }
-                    }
-                }
-                else {
-                    if (!($Message)) {
-                        "[Function: $($callerInfo.FunctionName)]"; "$headerPrefix${_}"
-                    }
-                    else {
-                        " [Function: $($callerInfo.FunctionName)]"; $Message -split "`n" | ForEach-Object { "$headerPrefix $_" }
-                    }
-                }
-                $logMessage += ($messageLines -join "`n") + $functionInfo
-            }
-            else {
-                $messageLines = if (!($Message)) {
-                    "$headerPrefix${_}"
-                }
-                else {
-                    $Message -split "`n" | ForEach-Object { "$headerPrefix $_" }
-                }
-                $logMessage += $messageLines -join "`n"
-            }
-            if ($Level -eq "ERROR" -and $Error[0]) {
-                $errorRecord = $Error[0]
-                $invocationInfo = $errorRecord.InvocationInfo
-                try {
-                    if ($ErrorRecord.InvocationInfo.PSCommandPath -and (Test-Path -Path $errorRecord.InvocationInfo.PSCommandPath)) {
-                        $scriptLines = Get-Content -Path "$($errorRecord.InvocationInfo.PSCommandPath)" -ErrorAction Stop
-                    }
-                    elseif ($ErrorRecord.InvocationInfo.ScriptName -and (Test-Path -Path $errorRecord.InvocationInfo.ScriptName)) {
-                        $scriptLines = Get-Content -Path "$($errorRecord.InvocationInfo.ScriptName)" -ErrorAction Stop
-                    }
-                }
-                catch {
-                    if ($isPSCore) {
-                        Write-Host "$reset[$blue$timestamp$reset][$($reset)e[31mERROR$reset] An error occurred in New-Log function. $($reset)e[31m$($_.Exception.Message)$reset"
-                    }
-                    else {
-                        Write-Host "[$timestamp][ERROR] An error occurred in New-Log function. $($_.Exception.Message)" -ForegroundColor Red
-                    }
-                }
-                $functionName = $callerInfo.Command
-                $failedCode = if ($invocationInfo.Line) {
-                    $invocationInfo.Line.Trim()
-                }
-                else {
-                    $null
-                }
-                [int]$errorLine = $errorRecord.InvocationInfo.ScriptLineNumber
-                if ([string]::IsNullOrEmpty($errorLine)) {
-                    [int]$errorLine = $invocationInfo.ScriptLineNumber
-                }
-                if (!([string]::IsNullOrEmpty($scriptLines))) {
-                    [int]$functionStartLine = ($scriptLines | Select-String -Pattern "function\s+$functionName" | Select-Object -First 1).LineNumber
-                    $lineNumberInFunction = $errorLine - $functionStartLine
-                    $lineInfo = "($lineNumberInFunction,$errorLine) (Function,Script)"
-                    if ($callerInfo.FunctionName -eq '<ScriptBlock>') {
-                        $lineInfo = "$errorLine (Script)"
-                    }
-                }
-                else {
-                    $lineNumberInFunction = $errorLine - ([int]$callerInfo.ScriptLineNumber - [int]$invocationInfo.OffsetInLine) - 1
-                    $lineInfo = "($lineNumberInFunction,$errorLine) (Function,Script)"
-                    if ($callerInfo.FunctionName -eq '<ScriptBlock>') {
-                        $lineInfo = "$errorLine (Script)"
-                    }
-                }
-                $exceptionMessage = $($errorRecord.Exception.Message)
-                if ($isPSCore) {
-                    $logMessage += "[${blue}CodeRow${reset}: $lineInfo]"
-                    $logMessage += "[${blue}FailedCode${reset}: $failedCode]"
-                    $logMessage += "[${blue}ExceptionMessage${reset}: ${reset}`e[$($levelColors[$Level].ANSI)m$exceptionMessage$reset]"
-                }
-                else {
-                    $logMessage += "[CodeRow: $lineInfo]"
-                    $logMessage += "[FailedCode: $failedCode]"
-                    $logMessage += "[ExceptionMessage: $exceptionMessage]"
-                }
-            }
-            if (!($NoConsole.IsPresent) -and !($PassThru.IsPresent) -and !($AsObject.IsPresent) -and !($LogFilePath)) {
-                $LogSentToConsole = Write-MessageToConsole
-            }
-            if ($LogFilePath) {
-                $LogSentToConsole = Write-MessageToConsole
-                $logMessage = [regex]::Replace($logMessage, $([regex]::Escape("`e") + '\[[0-9;]*[mGKHF]'), '')
-                if (!(Test-Path -Path (Split-Path -Path $LogFilePath -Parent))) {
-                    New-Item -Path (Split-Path -Path $LogFilePath -Parent) -ItemType Directory -Force -ErrorAction Stop | Out-Null
-                }
-                if ($ForcedLogFile.IsPresent) {
-                    Remove-Item -Path $LogFilePath -Force -ErrorAction SilentlyContinue | Out-Null
-                    Set-Content -Value $logMessage -Path $LogFilePath -Force -Encoding utf8
-                }
-                else {
-                    $logMessage | Out-File -FilePath $LogFilePath -Append -Encoding utf8
-                }
-            }
-            $object = [PSCustomObject]@{
-                Timestamp      = $timestamp
-                Level          = $Level
-                Message        = if (!([string]::IsNullOrEmpty($originalMessage)) -and $originalMessage.GetType().Name -eq 'String' ) {
-                    $message
-                }
-                else {
-                    [pscustomobject](($Message | Format-List | Out-String).Trim()) -split "`n"
-                }
-                Exception      = if ($exceptionMessage -and !([string]::IsNullOrEmpty($exceptionMessage)) ) {
-                    $exceptionMessage
-                }
-                else {
-                    $null
-                }
-                CallerFunction = if (!([string]::IsNullOrEmpty($callerInfo)) -and $callerInfo.FunctionName -eq '<ScriptBlock>') {
-                    $null
-                }
-                else {
-                    $callerInfo.FunctionName
-                }
-                CodeRow        = if ($lineInfo -and !([string]::IsNullOrEmpty($lineInfo)) ) {
-                    $lineInfo
-                }
-                else {
-                    $null
-                }
-                FailedCode     = if ($FailedCode -and !([string]::IsNullOrEmpty($FailedCode)) ) {
-                    $FailedCode
-                }
-                else {
-                    $null
-                }
-            }
-            if ($PassThru.IsPresent -and $AsObject.IsPresent) {
-                $LogSentToConsole = Write-MessageToConsole
-                return $object
-            }
-            elseif ($PassThru.IsPresent -and !($AsObject.IsPresent)) {
-                $LogSentToConsole = Write-MessageToConsole
-                return $logMessage
-            }
-            elseif (!($NoConsole.IsPresent) -and $AsObject.IsPresent) {
-                $object | Out-Host
+                $originalEncoding = [Console]::OutputEncoding
+                [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
             }
         }
         catch {
-            if ($isPSCore) {
-                Write-Host "$reset[$blue$timestamp$reset][`e[31mERROR$reset] An error occurred in New-Log function. `e[31m$($_.Exception.Message)$reset"
+            Write-Verbose "Failed to set console encoding: $($_.Exception.Message)"
+        }
+        if ($LogFilePath -and $AppendTimestampToFile) {
+            $fileInfo = [System.IO.FileInfo]::new($LogFilePath)
+            $LogFilePath = "{0}\{1}_{2}{3}" -f $fileInfo.Directory, $fileInfo.BaseName, (Get-Date -Format 'yyyyMMdd_HHmmss'), $fileInfo.Extension
+        }
+    }
+    Process {
+        try {
+            if ($null -eq $Message -and $Level -ne 'ERROR') { return }
+            $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'
+            $callStack = Get-PSCallStack -ErrorAction SilentlyContinue
+            $colorCode = $levelColors[$Level].ANSI
+            $ansiReset = if ($script:isPSCore) { "`e[0m" } else { '' }
+            $msgData = switch ($Message) {
+                { $_ -is [System.Collections.Hashtable] -or $_ -is [PSCustomObject] } {
+                    $originalMessage = $Message
+                    try {
+                        if ($_ -is [System.Collections.Hashtable]) {
+                            [PSCustomObject]$_ | ConvertTo-Json -Compress -Depth 5 -ErrorAction Stop
+                        }
+                        else {
+                            $_ | ConvertTo-Json -Compress -Depth 5 -ErrorAction Stop
+                        }
+                    }
+                    catch { ($_ | Out-String -Width 4096).Trim() }
+                }
+                { $_ -is [string] } { $_ }
+                { $_ -is [System.Management.Automation.ErrorRecord] } {
+                    $($_.Exception.Message)
+                }
+                default { ($_ | Out-String -Width 4096).Trim() }
             }
-            else {
-                Write-Host "[$timestamp][ERROR] An error occurred in New-Log function. $($_.Exception.Message)" -ForegroundColor Red
+            $exceptionMsg = $failedCode = $callerInfo = $callerInfoPSCore = $null
+            if ($Level -eq 'ERROR') {
+                $err = if ($Message -is [System.Management.Automation.ErrorRecord]) {
+                    $Message
+                }
+                elseif ($Error.Count -gt 0) {
+                    $Error[0]
+                }
+                else {
+                    $null
+                }
+                if ($err) {
+                    $exceptionMsg = $err.Exception.Message
+                    $failedCode = if ($err.InvocationInfo) { $err.InvocationInfo.Line.Trim() } else { "N/A" }
+                    $relevantCall = @()
+                    $callStack = $callStack | Sort-Object -Property ScriptLineNumber -Descending
+                    for ($i = 0; $i -lt $callStack.Count; $i++) {
+                        $prop = $callStack[$i]
+                        if ($prop.Command -eq "New-Log") {
+                            for ($j = $i - 1; $j -ge 0; $j--) {
+                                if ($callStack[$j].FunctionName -notmatch '<ScriptBlock>' -or $callStack[$j].Command -ne $callStack[0].Command) {
+                                    $relevantCall = [PSCustomObject]@{
+                                        CalledFromLine   = $callStack[0].ScriptLineNumber
+                                        FunctionName     = $callStack[$j].FunctionName
+                                        ScriptLineNumber = $callStack[$j].ScriptLineNumber
+                                    }
+                                }
+                                else {
+                                    $relevantCall = [PSCustomObject]@{
+                                        CalledFromLine = $callStack[0].ScriptLineNumber
+                                    }
+                                }
+                                break
+                            }
+                            break
+                        }
+                    }
+                    if ($relevantCall.CalledFromLine) {
+                        $callerInfo = "Called from line: $($relevantCall.CalledFromLine)"
+                        $callerInfoPSCore = "Called from file line: `e[34m$($relevantCall.CalledFromLine)$ansiReset"
+                    }
+                    if ($relevantCall.FunctionName) {
+                        $callerInfo += ", in function [$($relevantCall.FunctionName)] on file line: $($relevantCall.ScriptLineNumber)"
+                        $callerInfoPSCore += ", in function `e[34m[$($relevantCall.FunctionName)]$ansiReset on file line: `e[34m$($relevantCall.ScriptLineNumber)$ansiReset"
+                    }
+                }
             }
+            $logEntry = [PSCustomObject]@{
+                Timestamp = $timestamp
+                Level     = $Level
+                Message   = $msgData
+            }
+            if ($Level -eq 'ERROR') {
+                if ($callerInfo) { $logEntry | Add-Member -NotePropertyName CallerInfo -NotePropertyValue $callerInfo }
+                if ($failedCode) { $logEntry | Add-Member -NotePropertyName FailedCode -NotePropertyValue $failedCode }
+                if ($exceptionMsg) { $logEntry | Add-Member -NotePropertyName Exception -NotePropertyValue $exceptionMsg }
+            }
+            if ($LogFilePath) {
+                $parentDir = Split-Path $LogFilePath -Parent
+                if (-not (Test-Path $parentDir)) {
+                    New-Item $parentDir -ItemType Directory -Force | Out-Null
+                }
+                if ($LogRotationSizeMB -gt 0 -and (Test-Path $LogFilePath)) {
+                    $logFile = Get-Item $LogFilePath
+                    if ($logFile.Length -gt ($LogRotationSizeMB * 1MB)) {
+                        $backupPath = "{0}\{1}_{2}{3}" -f $logFile.DirectoryName, $logFile.BaseName, (Get-Date -Format 'yyyyMMdd_HHmmss'), $logFile.Extension
+                        Move-Item -Path $LogFilePath -Destination $backupPath -Force
+                    }
+                }
+                if ($LogFormat -eq "JSON") {
+                    $fileMessage = $logEntry | ConvertTo-Json -Compress
+                }
+                else {
+                    $fileMessage = "[$timestamp][$Level] $msgData"
+                    if ($originalMessage) {
+                        $fileMessage = "[$timestamp][$Level] `n$(($originalMessage | Format-Table -AutoSize | Out-String).Trim())"
+                    }
+                    if ($Level -eq 'ERROR' -and $callerInfo) {
+                        $fileMessage += " [CallerInfo: $callerInfo]"
+                        if ($failedCode) { $fileMessage += "[FailedCode: $failedCode]" }
+                        if ($exceptionMsg) { $fileMessage += "[Exception: $exceptionMsg]" }
+                    }
+                }
+                if ($ForcedLogFile.IsPresent) {
+                    [System.IO.File]::WriteAllText($LogFilePath, $fileMessage, $utf8NoBomEncoding)
+                }
+                else {
+                    $content = [System.IO.File]::ReadAllText($LogFilePath, $utf8NoBomEncoding)
+                    $content += "`r`n" + $fileMessage
+                    [System.IO.File]::WriteAllText($LogFilePath, $content, $utf8NoBomEncoding)
+                }
+            }
+            if (-not $NoConsole) {
+                if ($originalMessage) {
+                    $prefixMessage = if ($script:isPSCore) {
+                        "`e[34m[$timestamp]$ansiReset`e[${colorCode}m[$Level]$ansiReset"
+                    }
+                    else {
+                        "[$timestamp][$Level]"
+                    }
+                    Write-Host $prefixMessage -ForegroundColor $levelColors[$Level].PS -NoNewline
+                    $tableOutput = ($originalMessage | Format-Table -AutoSize | Out-String).Trim()
+                    Write-Host "`n$tableOutput" -ForegroundColor $levelColors[$Level].PS
+                }
+                else {
+                    $consoleMessage = if ($script:isPSCore) {
+                        "`e[34m[$timestamp]$ansiReset`e[${colorCode}m[$Level]$ansiReset `e[37m$msgData"
+                    }
+                    else {
+                        "[$timestamp][$Level] $msgData"
+                    }
+                    if ($Level -eq 'ERROR' -and $script:isPSCore) {
+                        if ($callerInfoPSCore) { $consoleMessage += " `e[${colorCode}m[CallerInfo:$ansiReset $callerInfoPSCore`e[${colorCode}m]" }
+                        if ($failedCode) { $consoleMessage += "`e[${colorCode}m[FailedCode:$ansiReset `e[37m$failedCode$ansiReset`e[${colorCode}m]" }
+                        if ($exceptionMsg) { $consoleMessage += "`e[${colorCode}m[Exception:$ansiReset `e[37m$exceptionMsg$ansiReset`e[${colorCode}m]" }
+                    }
+                    elseif ($Level -eq 'ERROR') {
+                        if ($callerInfo) { $consoleMessage += " [CallerInfo: $callerInfo]" }
+                        if ($failedCode) { $consoleMessage += "[FailedCode: $failedCode]" }
+                        if ($exceptionMsg) { $consoleMessage += "[Exception: $exceptionMsg]" }
+                    }
+                    Write-Host $consoleMessage -ForegroundColor $levelColors[$Level].PS
+                }
+            }
+            if ($ReturnObject) {
+                return $logEntry
+            }
+        }
+        catch {
+            Write-Error "Logging failed: $($_.Exception.Message)"
+        }
+    }
+    End {
+        try {
+            [Console]::OutputEncoding = $originalEncoding
+        }
+        catch {
+            [void]$null
         }
     }
 }
