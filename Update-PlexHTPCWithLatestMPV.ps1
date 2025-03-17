@@ -188,8 +188,8 @@ function Get-MPVVersion {
             }
         }
         try {
-            $online = (Get-Item -Path "$tempPath\lib\mpv-2.dll").VersionInfo.FileVersion
-            $local = (Get-Item (Join-Path $localInstallPath "mpv-2.dll")).VersionInfo.FileVersion
+            $online = (Get-Item -Path "$tempPath\lib\libmpv-2.dll").VersionInfo.FileVersion
+            $local = (Get-Item (Join-Path $localInstallPath "libmpv-2.dll")).VersionInfo.FileVersion
             [version]$localVersion = Compare-MPVVersion -Version $local
             [version]$onlineVersion = Compare-MPVVersion -Version $online
             if ($onlineVersion -and $localVersion -and $onlineVersion -gt $localVersion) {
@@ -220,7 +220,7 @@ function Get-MPVVersion {
         }
     }
     try {
-        [datetime]$localVersionDate = (Get-Item (Join-Path $localInstallPath "mpv-2.dll")).LastWriteTime.ToString("yyyy-MM-dd")
+        [datetime]$localVersionDate = (Get-Item (Join-Path $localInstallPath "libmpv-2.dll")).LastWriteTime.ToString("yyyy-MM-dd")
         [datetime]$onlineVersionDate = ($mpvOnlineResponse.tag_name).Substring(0, 10)
         if ($onlineversiondate -and $localVersionDate -and $onlineVersionDate -gt $localVersionDate) {
             return @{
@@ -257,7 +257,7 @@ function Check-MPVUpdate {
     )
     if ($KeepCurrentVersion.IsPresent) {
         New-Log "Keeping current MPV version."
-        New-Log "Current local mpv version is: [$((Get-Item (Join-Path $localInstallPath "mpv-2.dll")).VersionInfo.FileVersion)]"
+        New-Log "Current local mpv version is: [$((Get-Item (Join-Path $localInstallPath "libmpv-2.dll")).VersionInfo.FileVersion)]"
         return
     }
     $needUpdate = if ($CompareVersion.IsPresent) {
@@ -275,9 +275,9 @@ function Check-MPVUpdate {
         }
     }
     else {
-        New-Log "Local mpv version: [$((Get-Item (Join-Path $localInstallPath "mpv-2.dll")).VersionInfo.FileVersion)] is up to date." -Level SUCCESS
+        New-Log "Local mpv version: [$((Get-Item (Join-Path $localInstallPath "libmpv-2.dll")).VersionInfo.FileVersion)] is up to date." -Level SUCCESS
     }
-    if ((Get-Item (Join-Path $localInstallPath "mpv-2.dll")).Length -lt 50000000) {
+    if ((Get-Item (Join-Path $localInstallPath "libmpv-2.dll")).Length -lt 50000000) {
         New-Log "You are using the original PlexHTPC mpv client."
     }
     else {
@@ -369,8 +369,8 @@ function Update-MPV {
     try {
         if ($VersionDownloaded.IsPresent) {
             try {
-                New-Log "Starting MPV update process... Latest version is already downloaded. Copying new mpv-2.dll to $localInstallPath..."
-                Copy-Item -Path (Join-Path $tempPath "lib\mpv-2.dll") -Destination $localInstallPath -Force -Recurse -Confirm:$false -ErrorAction Stop | Out-Null
+                New-Log "Starting MPV update process... Latest version is already downloaded. Copying new libmpv-2.dll to $localInstallPath..."
+                Copy-Item -Path (Join-Path $tempPath "lib\libmpv-2.dll") -Destination $localInstallPath -Force -Recurse -Confirm:$false -ErrorAction Stop | Out-Null
                 New-Log "MPV update completed successfully! New version:[v0.$Version]" -Level SUCCESS
             }
             catch {
@@ -399,8 +399,8 @@ function Update-MPV {
         New-Log "Copying updated MPV files..."
         New-Item -Path $backupDir -Force -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
         try {
-            Copy-Item -Path ("$localInstallPath" + "mpv-2.dll") -Destination $backupDir -Force -Confirm:$false -ErrorAction Stop | Out-Null
-            New-Log "Successfully backed up the current mpv client to: [$backupDir\mpv-2.dll]." -Level SUCCESS
+            Copy-Item -Path ("$localInstallPath" + "libmpv-2.dll") -Destination $backupDir -Force -Confirm:$false -ErrorAction Stop | Out-Null
+            New-Log "Successfully backed up the current mpv client to: [$backupDir\libmpv-2.dll]." -Level SUCCESS
         }
         catch {
             if($Force.IsPresent) {
@@ -412,7 +412,7 @@ function Update-MPV {
             }
         }
         try {
-            Copy-Item -Path (Join-Path $tempPath "lib\mpv-2.dll") -Destination $localInstallPath -Force -Recurse -Confirm:$false -ErrorAction Stop | Out-Null
+            Copy-Item -Path (Join-Path $tempPath "lib\libmpv-2.dll") -Destination $localInstallPath -Force -Recurse -Confirm:$false -ErrorAction Stop | Out-Null
             New-Log "MPV update completed successfully! New version: [v0.$Version]" -Level SUCCESS
         }
         catch {
@@ -430,9 +430,9 @@ function Update-MPV {
     }
 }
 function Ensure-NanaZipInstalled {
-    $nanaZipInstalled = Get-AppxPackage | Where-Object { $_.Name -like "*NanaZip*" }
+    $nanaZipInstalled = Get-Command nanazip
     if ($nanaZipInstalled) {
-        New-Log "NanaZip version [$($nanaZipInstalled.Version)] is already installed." -Level SUCCESS
+        New-Log "NanaZip is already installed." -Level SUCCESS
         return $true
     }
     $wingetPath = Get-Command winget -ErrorAction SilentlyContinue
@@ -442,16 +442,9 @@ function Ensure-NanaZipInstalled {
     }
     New-Log "Attempting to install NanaZip..."
     try {
-        Start-Process -FilePath $wingetPath.Source -ArgumentList "install -e --force --id M2Team.NanaZip --accept-package-agreements --accept-source-agreements --silent" -Wait -NoNewWindow
-        $nanaZipInstalled = Get-AppxPackage | Where-Object { $_.Name -like "*NanaZip*" }
-        if ($nanaZipInstalled) {
-            New-Log "NanaZip version [$($nanaZipInstalled.Version)] has been successfully installed." -Level SUCCESS
-            return $true
-        }
-        else {
-            New-Log "NanaZip installation seems to have failed. Please check for any error messages above." -Level ERROR
-            return $false
-        }
+        Start-Process -FilePath $wingetPath.Source -ArgumentList "install -e --force --id M2Team.NanaZip --accept-package-agreements --accept-source-agreements --silent" -Wait -NoNewWindow -ErrorAction Stop
+        New-Log "NanaZip version has been successfully installed. Restart powershell so its found." -Level SUCCESS
+        Exit 0
     }
     catch {
         New-Log "An error occurred while trying to install NanaZip." -Level ERROR
