@@ -113,7 +113,7 @@ function New-Log {
     .NOTES
         Author: Harze2k
         Date:   2025-04-23 (Updated)
-        Version: 3.1 (Fixed Log Rotation)
+        Version: 3.2 (Fixed $ErrorObject)
         - Console writer now respects and preserves the original indentation from formatters (like ConvertTo-Json, Format-Table) instead of applying a secondary, fixed indent.
         - Added 'Type is [typename]' line for complex objects in console TEXT output.
         - Internal Write-Verbose messages only show if -Verbose is passed *directly* to New-Log.
@@ -137,7 +137,7 @@ function New-Log {
 		[Parameter(Position = 10)][switch]$NoAutoGroup,
 		[Parameter(Position = 11)][switch]$NoErrorLookup,
 		[Parameter(Position = 12)][string]$DateFormat = 'yyyy-MM-dd HH:mm:ss.fff',
-		[Parameter(ValueFromPipelineByPropertyName)]$ErrorObject = $(try { $PSCmdlet.GetVariableValue('_') } catch { $null })
+		[Parameter()]$ErrorObject = $(if ($global:error.Count -gt 0) { $global:error[0] } else {$null })
 	)
 	Begin {
 		#region Initialize Variables
