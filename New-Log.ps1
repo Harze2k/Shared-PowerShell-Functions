@@ -112,8 +112,8 @@ function New-Log {
 		[2025-04-23 05:37:32.118][ERROR Detail] Code: 1 / 0
     .NOTES
         Author: Harze2k
-        Date:   2025-04-23 (Updated)
-        Version: 3.2 (Fixed $ErrorObject)
+        Date:   2025-04-26 (Updated)
+        Version: 3.3 (Minor fixes.)
         - Console writer now respects and preserves the original indentation from formatters (like ConvertTo-Json, Format-Table) instead of applying a secondary, fixed indent.
         - Added 'Type is [typename]' line for complex objects in console TEXT output.
         - Internal Write-Verbose messages only show if -Verbose is passed *directly* to New-Log.
@@ -730,9 +730,9 @@ function New-Log {
 				-CurrentDateFormat $DateFormat `
 				-CurrentLevelColors $script:LevelColors `
 				-CurrentIsPSCore $script:isPSCore `
-				-CurrentNoConsole $NoConsole `
-				-CurrentReturnObject $ReturnObject `
-				-CurrentNoErrorLookup $NoErrorLookup -ErrorAction Stop
+				-CurrentNoConsole $NoConsole.IsPresent `
+				-CurrentReturnObject $ReturnObject.IsPresent `
+				-CurrentNoErrorLookup $NoErrorLookup.IsPresent -ErrorAction Stop
 			if ($ReturnObject -and $null -ne $result) {
 				Write-Output $result
 			}
@@ -770,8 +770,8 @@ function New-Log {
 						-CurrentDateFormat $DateFormat `
 						-CurrentLevelColors $script:LevelColors `
 						-CurrentIsPSCore $script:isPSCore `
-						-CurrentNoConsole $NoConsole `
-						-CurrentReturnObject $ReturnObject -ErrorAction Stop
+						-CurrentNoConsole $NoConsole.IsPresent `
+						-CurrentReturnObject $ReturnObject.IsPresent -ErrorAction Stop
 					$processedGroup = $true
 				}
 				catch {
@@ -791,8 +791,8 @@ function New-Log {
 						-CurrentDateFormat $DateFormat `
 						-CurrentLevelColors $script:LevelColors `
 						-CurrentIsPSCore $script:isPSCore `
-						-CurrentNoConsole $NoConsole `
-						-CurrentReturnObject $ReturnObject -ErrorAction Stop
+						-CurrentNoConsole $NoConsole.IsPresent `
+						-CurrentReturnObject $ReturnObject.IsPresent -ErrorAction Stop
 					$processedGroup = $true
 				}
 				catch {
