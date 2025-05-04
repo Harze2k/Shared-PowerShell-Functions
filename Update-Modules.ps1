@@ -2,7 +2,7 @@
 <#
 Author: Harze2k
 Date:   2025-05-05
-Version: 2.6 (Added some helpful comments.)
+Version: 2.7 (Cleaned up some output.)
 
 Sample output:
 
@@ -1314,7 +1314,7 @@ function Get-ModuleUpdateStatus {
 					}
 					elseif ($job.State -eq 'Completed') {
 						$galleryModule = $job | Receive-Job
-						if ($galleryModule) { New-Log "Job $($job.Id) completed. Found '$moduleName' version $($galleryModule.Version)." -Level SUCCESS }
+						if ($galleryModule) { New-Log "Job $($job.Id) completed. Found '$moduleName' version $($galleryModule.Version)." -Level DEBUG }
 						else { New-Log "Job $($job.Id) completed. Module '$moduleName' not found in specified repositories." -Level VERBOSE }
 					}
 					else {
@@ -1363,13 +1363,13 @@ function Get-ModuleUpdateStatus {
 								}
 							}
 							if ($needsUpdate) {
-								New-Log "Update found for '$moduleName': Local '$highestLocalStr' -> Online '$latestOnlineStr'" -Level SUCCESS
 								$modulesByPath = $moduleData.AllVersions | Group-Object -Property BasePath
 								$outdatedPaths = @()
 								foreach ($pathGroup in $modulesByPath) {
 									$hasUpToDateVersion = $pathGroup.Group | Where-Object {	$_.ModuleVersion -eq $latestOnline -or ($_.ModuleVersion -eq $latestOnline -and $_.PreReleaseLabel -eq $galleryModule.Prerelease) } | Select-Object -First 1 # Check if any module in this path is up-to-date
 									if (-not $hasUpToDateVersion) {
 										$outdatedPaths += $pathGroup.Name # If no up-to-date version exists in this path, add it to outdated paths
+										New-Log "Update found for '$moduleName': Local '$highestLocalStr' -> Online '$latestOnlineStr'" -Level SUCCESS
 									}
 								}
 								if ($outdatedPaths) {
