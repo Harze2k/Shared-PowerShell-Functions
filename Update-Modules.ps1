@@ -1,9 +1,11 @@
-#Requires -Version 7.4
+#Requires -Version 7.0
 <#
 Author: Harze2k
-Date:   2025-04-26 (First public release)
-Version: 2.5 (Reworked most of the script.)
+Date:   2025-05-05
+Version: 2.6 (Added some helpful comments.)
+
 Sample output:
+
 [2025-05-04 23:21:28.486][INFO] TLS 1.2 security protocol enabled for this session.
 [2025-05-04 23:21:28.527][INFO] Parameter -ImportDependencies specified. Checking/installing dependencies...
 [2025-05-04 23:21:28.598][INFO] PSGallery repository is already trusted.
@@ -1832,7 +1834,7 @@ Check-PSResourceRepository -ImportDependencies
 $ignoredModules = @('Example2.Diagnostics') #Fully ignored modules
 $blackList = @{ #Ignored module and repo combo.
 	'Microsoft.Graph.Beta' = 'NuGetGallery'
-	'Microsoft.Graph'      = 'NuGetGallery'
+	'Microsoft.Graph'      = @("Nuget", "NugetGallery")
 }
 $paths = $env:PSModulePath.Split(';') | Where-Object { $_ -inotmatch '.vscode' }
 $moduleInfo = Get-ModuleInfo -Paths $paths -IgnoredModules $ignoredModules
