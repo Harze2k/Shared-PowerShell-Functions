@@ -13,6 +13,8 @@ function New-Log {
     .PARAMETER Message
         The message or object to log. Can be piped. Objects will be formatted appropriately.
         Handles $null and empty strings gracefully.
+	.PARAMETER DontClearErrorVariable
+		Stops the function from clearing the $Error variable. Default: clears it.
     .PARAMETER Level
         The severity level of the log message. Defaults to "INFO".
         Valid values: ERROR, WARNING, INFO, SUCCESS, DEBUG, VERBOSE.
@@ -112,8 +114,8 @@ function New-Log {
 		[2025-04-23 05:37:32.118][ERROR Detail] Code: 1 / 0
     .NOTES
         Author: Harze2k
-        Date:   2025-04-27 (Updated)
-        Version: 3.4 (Just some cleanup.)
+        Date:   2025-05-25 (Updated)
+        Version: 3.5 (Added default clearing of the $Error variable.)
         - Console writer now respects and preserves the original indentation from formatters (like ConvertTo-Json, Format-Table) instead of applying a secondary, fixed indent.
         - Added 'Type is [typename]' line for complex objects in console TEXT output.
         - Internal Write-Verbose messages only show if -Verbose is passed *directly* to New-Log.
@@ -126,17 +128,18 @@ function New-Log {
 	param(
 		[Parameter(ValueFromPipeline, Position = 0)]$Message,
 		[Parameter(Position = 1)][ValidateSet("ERROR", "WARNING", "INFO", "SUCCESS", "DEBUG", "VERBOSE")][string]$Level = "INFO",
-		[Parameter(Position = 2)][switch]$NoConsole,
-		[Parameter(Position = 3)][switch]$ReturnObject,
-		[Parameter(Position = 4)][string]$LogFilePath,
-		[Parameter(Position = 5)][switch]$ForcedLogFile,
-		[Parameter(Position = 6)][switch]$AppendTimestampToFile,
-		[Parameter(Position = 7)][ValidateRange(0, [double]::MaxValue)][double]$LogRotationSizeMB = 1,
-		[Parameter(Position = 8)][ValidateSet("TEXT", "JSON")][string]$LogFormat = "TEXT",
-		[Parameter(Position = 9)][switch]$GroupObjects,
-		[Parameter(Position = 10)][switch]$NoAutoGroup,
-		[Parameter(Position = 11)][switch]$NoErrorLookup,
-		[Parameter(Position = 12)][string]$DateFormat = 'yyyy-MM-dd HH:mm:ss.fff',
+		[Parameter(Position = 2)][switch]$DontClearErrorVariable,
+		[Parameter(Position = 3)][switch]$NoConsole,
+		[Parameter(Position = 4)][switch]$ReturnObject,
+		[Parameter(Position = 5)][string]$LogFilePath,
+		[Parameter(Position = 6)][switch]$ForcedLogFile,
+		[Parameter(Position = 7)][switch]$AppendTimestampToFile,
+		[Parameter(Position = 8)][ValidateRange(0, [double]::MaxValue)][double]$LogRotationSizeMB = 1,
+		[Parameter(Position = 9)][ValidateSet("TEXT", "JSON")][string]$LogFormat = "TEXT",
+		[Parameter(Position = 10)][switch]$GroupObjects,
+		[Parameter(Position = 11)][switch]$NoAutoGroup,
+		[Parameter(Position = 12)][switch]$NoErrorLookup,
+		[Parameter(Position = 13)][string]$DateFormat = 'yyyy-MM-dd HH:mm:ss.fff',
 		[Parameter()]$ErrorObject = $(if ($global:error.Count -gt 0) { $global:error[0] } else {$null })
 	)
 	Begin {
@@ -382,7 +385,8 @@ function New-Log {
 				[bool]$CurrentIsPSCore,
 				[bool]$CurrentNoConsole,
 				[bool]$CurrentReturnObject,
-				[bool]$CurrentNoErrorLookup
+				[bool]$CurrentNoErrorLookup,
+				[bool]$DontClearErrorVariable
 			)
 			if ($null -eq $ItemToProcess -and $CurrentLevel -ne 'ERROR') {
 				if ($script:ShowInternalVerbose) {
@@ -413,6 +417,9 @@ function New-Log {
 						FullError     = $err
 						FailedCode    = $null
 						CallerInfo    = $null
+					}
+					if (-not $DontClearErrorVariable) {
+						$Error.Clear()
 					}
 					# Set failed code if available
 					if ($err.InvocationInfo -and $err.InvocationInfo.Line) {
@@ -732,7 +739,8 @@ function New-Log {
 				-CurrentIsPSCore $script:isPSCore `
 				-CurrentNoConsole $NoConsole `
 				-CurrentReturnObject $ReturnObject `
-				-CurrentNoErrorLookup $NoErrorLookup -ErrorAction Stop
+				-CurrentNoErrorLookup $NoErrorLookup `
+				-DontClearErrorVariable $DontClearErrorVariable.IsPresent -ErrorAction Stop
 			if ($ReturnObject -and $null -ne $result) {
 				Write-Output $result
 			}
@@ -813,7 +821,8 @@ function New-Log {
 						-CurrentIsPSCore $script:isPSCore `
 						-CurrentNoConsole $NoConsole `
 						-CurrentReturnObject $ReturnObject `
-						-CurrentNoErrorLookup $NoErrorLookup -ErrorAction Stop
+						-CurrentNoErrorLookup $NoErrorLookup `
+						-DontClearErrorVariable $DontClearErrorVariable.IsPresent -ErrorAction Stop
 					$processedGroup = $true
 				}
 				catch {
