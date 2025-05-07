@@ -1,424 +1,103 @@
-#Requires -Version 7.0
+﻿#Requires -Version 7.0
+#region Check-PSResourceRepository
 <#
 Author: Harze2k
-Date:   2025-05-05
-Version: 2.7 (Cleaned up some output.)
-
+Date:   2025-05-07
+Version: 3.3 (Massive rework!)
+	-Added more Parallel Processing
+	-Added ThreadJobs
+	-Over 150% faster
+	-Finds basically all modules that can be found.
+	-Included help and guidelines.
+	-Progress reporting while parallel jobs.
 Sample output:
-
-[2025-05-04 23:21:28.486][INFO] TLS 1.2 security protocol enabled for this session.
-[2025-05-04 23:21:28.527][INFO] Parameter -ImportDependencies specified. Checking/installing dependencies...
-[2025-05-04 23:21:28.598][INFO] PSGallery repository is already trusted.
-[2025-05-04 23:21:28.846][INFO] Module 'Microsoft.PowerShell.PSResourceGet' version [1.1.1] is already installed and available.
-[2025-05-04 23:21:28.864][SUCCESS] Successfully imported module 'Microsoft.PowerShell.PSResourceGet'.
-[2025-05-04 23:21:29.833][INFO] Module 'PowerShellGet' version [3.0.23] is already installed and available.
-[2025-05-04 23:21:29.839][SUCCESS] Successfully imported module 'PowerShellGet'.
-[2025-05-04 23:21:29.842][SUCCESS] Required module commands are now available.
-[2025-05-04 23:21:29.844][INFO] Starting repository configuration...
-[2025-05-04 23:21:29.853][INFO] 'PSGallery' repository is already registered and configured correctly.
-[2025-05-04 23:21:29.860][INFO] 'NuGetGallery' repository is already registered and configured correctly.
-[2025-05-04 23:21:29.863][INFO] 'NuGet' repository is already registered and configured correctly.
-[2025-05-04 23:21:29.864][SUCCESS] All specified repositories appear to be registered and configured.
-
-[2025-05-04 23:23:44.370][DEBUG] Finished processing ActiveDirectory. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.372][DEBUG] Finished processing ADEssentials. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.373][DEBUG] Finished processing AOVPNTools. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.374][DEBUG] Finished processing AppBackgroundTask. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.376][DEBUG] Finished processing AppLocker. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.379][DEBUG] Finished processing AppvClient. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.381][DEBUG] Finished processing Appx. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.383][DEBUG] Finished processing Az.Accounts. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.385][DEBUG] Finished processing AzureAD. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.388][DEBUG] Finished processing AzureStackHCI. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.389][DEBUG] Finished processing BestPractices. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.391][DEBUG] Finished processing BitLocker. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.393][DEBUG] Finished processing BitsTransfer. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.396][DEBUG] Finished processing BranchCache. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.401][DEBUG] Finished processing BurntToast. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.403][DEBUG] Finished processing CimCmdlets. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.407][DEBUG] Finished processing ClusterAwareUpdating. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.410][DEBUG] Finished processing CommonStuff. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.412][DEBUG] Finished processing CompletionPredictor. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.434][DEBUG] Finished processing ConfigCI. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.447][DEBUG] Finished processing ConfigDefender. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.453][DEBUG] Finished processing ConfigDefenderPerformance. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.458][DEBUG] Finished processing Defender. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.462][DEBUG] Finished processing DefenderPerformance. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.471][DEBUG] Finished processing DeliveryOptimization. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.474][DEBUG] Finished processing DependencySearch. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.478][DEBUG] Finished processing dfsn. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.481][DEBUG] Finished processing DFSR. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.484][DEBUG] Finished processing DhcpServer. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.487][DEBUG] Finished processing DirectAccessClientComponents. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.490][DEBUG] Finished processing Dism. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.492][DEBUG] Finished processing DnsClient. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.494][DEBUG] Finished processing DnsServer. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.497][DEBUG] Finished processing DSCFileDownloadManager. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.500][DEBUG] Finished processing EditorServicesCommandSuite. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.502][DEBUG] Finished processing EnhancedPSTools. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.504][DEBUG] Finished processing EventTracingManagement. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.507][DEBUG] Finished processing Example2.Diagnostics. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.511][DEBUG] Finished processing ExchangeOnlineManagement. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.514][DEBUG] Finished processing Get-NetView. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.517][DEBUG] Finished processing GroupPolicy. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.519][DEBUG] Finished processing GroupSet. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.521][DEBUG] Finished processing HtmlAgilityPack. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.524][DEBUG] Finished processing ImportExcel. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.526][DEBUG] Finished processing Indented.Net.IP. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.528][DEBUG] Finished processing Indented.ScriptAnalyzerRules. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.531][DEBUG] Finished processing International. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.534][DEBUG] Finished processing IntuneStuff. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.537][DEBUG] Finished processing IpamServer. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.539][DEBUG] Finished processing iSCSI. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.541][DEBUG] Finished processing IscsiTarget. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.543][DEBUG] Finished processing Kds. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.547][DEBUG] Finished processing LanguagePackManagement. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.549][DEBUG] Finished processing LAPS. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.552][DEBUG] Finished processing LSUClient. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.553][DEBUG] Finished processing Microsoft.Graph. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.555][DEBUG] Finished processing Microsoft.Graph.Authentication. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.557][DEBUG] Finished processing Microsoft.Graph.Beta. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.559][DEBUG] Finished processing Microsoft.Graph.Beta.DeviceManagement. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.560][DEBUG] Finished processing Microsoft.Graph.Beta.DeviceManagement.Actions. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.563][DEBUG] Finished processing Microsoft.Graph.Beta.DeviceManagement.Administration. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.566][DEBUG] Finished processing Microsoft.Graph.Beta.DeviceManagement.Enrollment. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.568][DEBUG] Finished processing Microsoft.Graph.Beta.DeviceManagement.Functions. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.572][DEBUG] Finished processing Microsoft.Graph.Beta.Devices.CorporateManagement. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.577][DEBUG] Finished processing Microsoft.Graph.Beta.Groups. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.579][DEBUG] Finished processing Microsoft.Graph.Beta.Identity.DirectoryManagement. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.581][DEBUG] Finished processing Microsoft.Graph.Beta.Users. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.584][DEBUG] Finished processing Microsoft.Graph.Beta.Users.Actions. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.586][DEBUG] Finished processing Microsoft.Graph.Beta.Users.Functions. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.588][DEBUG] Finished processing Microsoft.Graph.Core. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.590][DEBUG] Finished processing Microsoft.Graph.DeviceManagement. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.591][DEBUG] Finished processing Microsoft.Graph.DeviceManagement.Actions. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.594][DEBUG] Finished processing Microsoft.Graph.DeviceManagement.Administration. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.596][DEBUG] Finished processing Microsoft.Graph.DeviceManagement.Enrollment. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.599][DEBUG] Finished processing Microsoft.Graph.DeviceManagement.Functions. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.605][DEBUG] Finished processing Microsoft.Graph.Devices.CorporateManagement. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.609][DEBUG] Finished processing Microsoft.Graph.DirectoryObjects. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.611][DEBUG] Finished processing Microsoft.Graph.Groups. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.613][DEBUG] Finished processing Microsoft.Graph.Identity.DirectoryManagement. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.617][DEBUG] Finished processing Microsoft.Graph.Intune. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.620][DEBUG] Finished processing Microsoft.PowerApps.Administration.PowerShell. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.622][DEBUG] Finished processing Microsoft.PowerShell.Archive. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.624][DEBUG] Finished processing Microsoft.PowerShell.Diagnostics. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.626][DEBUG] Finished processing Microsoft.PowerShell.Host. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.627][DEBUG] Finished processing Microsoft.PowerShell.Management. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.629][DEBUG] Finished processing Microsoft.PowerShell.ODataUtils. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.632][DEBUG] Finished processing Microsoft.PowerShell.Operation.Validation. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.636][DEBUG] Finished processing Microsoft.PowerShell.PSResourceGet. Found 4 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.640][DEBUG] Finished processing Microsoft.PowerShell.Security. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.642][DEBUG] Finished processing Microsoft.PowerShell.Utility. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.644][DEBUG] Finished processing Microsoft.ReFsDedup.Commands. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.647][DEBUG] Finished processing Microsoft.WSMan.Management. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.649][DEBUG] Finished processing MMAgent. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.652][DEBUG] Finished processing MSAL.PS. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.655][DEBUG] Finished processing MsDtc. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.657][DEBUG] Finished processing MSFT_NfsMappedIdentity. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.659][DEBUG] Finished processing MSGraphStuff. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.661][DEBUG] Finished processing NetAdapter. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.664][DEBUG] Finished processing NetConnection. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.666][DEBUG] Finished processing NetEventPacketCapture. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.668][DEBUG] Finished processing NetLbfo. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.670][DEBUG] Finished processing NetLldpAgent. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.674][DEBUG] Finished processing NetNat. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.676][DEBUG] Finished processing NetQos. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.678][DEBUG] Finished processing NetSwitchTeam. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.680][DEBUG] Finished processing NetworkConnectivityStatus. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.682][DEBUG] Finished processing NetworkControllerDiagnostics. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.685][DEBUG] Finished processing NetworkControllerFc. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.687][DEBUG] Finished processing NetworkLoadBalancingClusters. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.689][DEBUG] Finished processing NetworkSwitchManager. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.691][DEBUG] Finished processing NetworkTransition. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.692][DEBUG] Finished processing nfs. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.694][DEBUG] Finished processing OsConfiguration. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.696][DEBUG] Finished processing PackageManagement. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.698][DEBUG] Finished processing PcsvDevice. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.700][DEBUG] Finished processing PersistentMemory. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.706][DEBUG] Finished processing Pester. Found 4 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.709][DEBUG] Finished processing pki. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.710][DEBUG] Finished processing PnpDevice. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.712][DEBUG] Finished processing PolicyFileEditor. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.715][DEBUG] Finished processing PowerHTML. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.717][DEBUG] Finished processing PowerQuest. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.721][DEBUG] Finished processing PowerShellGet. Found 12 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.723][DEBUG] Finished processing PrintManagement. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.725][DEBUG] Finished processing ProcessMitigations. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.727][DEBUG] Finished processing ProcessSet. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.729][DEBUG] Finished processing provisioning. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.732][DEBUG] Finished processing ps2exe. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.736][DEBUG] Finished processing PSDesiredStateConfiguration. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.738][DEBUG] Finished processing PSDev. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.740][DEBUG] Finished processing PSDiagnostics. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.742][DEBUG] Finished processing PSEventViewer. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.744][DEBUG] Finished processing PSFramework. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.746][DEBUG] Finished processing PSModuleDevelopment. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.747][DEBUG] Finished processing PSPreworkout. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.751][DEBUG] Finished processing PSReadLine. Found 4 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.753][DEBUG] Finished processing PSScheduledJob. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.756][DEBUG] Finished processing PSSharedGoods. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.758][DEBUG] Finished processing PSWindowsUpdate. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.760][DEBUG] Finished processing PSWorkflow. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.762][DEBUG] Finished processing PSWorkflowUtility. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.764][DEBUG] Finished processing PSWriteHTML. Found 3 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.768][DEBUG] Finished processing Refactor. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.770][DEBUG] Finished processing RemoteAccess. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.772][DEBUG] Finished processing RemoteDesktop. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.774][DEBUG] Finished processing ScheduledTasks. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.775][DEBUG] Finished processing SecureBoot. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.777][DEBUG] Finished processing ServerManager. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.778][DEBUG] Finished processing ServerManagerTasks. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.780][DEBUG] Finished processing ServiceSet. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.781][DEBUG] Finished processing SharePointPnPPowerShellOnline. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.783][DEBUG] Finished processing SmbShare. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.786][DEBUG] Finished processing SmbWitness. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.787][DEBUG] Finished processing SplitPipeline. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.789][DEBUG] Finished processing StartLayout. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.790][DEBUG] Finished processing StorageMigrationService. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.791][DEBUG] Finished processing storagereplica. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.794][DEBUG] Finished processing string. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.796][DEBUG] Finished processing SystemInsights. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.800][DEBUG] Finished processing ThreadJob. Found 4 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.802][DEBUG] Finished processing tls. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.804][DEBUG] Finished processing TroubleshootingPack. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.806][DEBUG] Finished processing TrustedPlatformModule. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.807][DEBUG] Finished processing UEV. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.808][DEBUG] Finished processing VMDirectStorage. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.809][DEBUG] Finished processing VpnClient. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.814][DEBUG] Finished processing Wdac. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.816][DEBUG] Finished processing WebDownloadManager. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.817][DEBUG] Finished processing Whea. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.820][DEBUG] Finished processing WindowsAutoPilotIntune. Found 2 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.822][DEBUG] Finished processing WindowsDeveloperLicense. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.823][DEBUG] Finished processing WindowsErrorReporting. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.827][DEBUG] Finished processing WindowsFeatureSet. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.828][DEBUG] Finished processing WindowsOptionalFeatureSet. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.830][DEBUG] Finished processing WindowsPackageCab. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.832][DEBUG] Finished processing WindowsSearch. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.833][DEBUG] Finished processing WindowsUpdate. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.836][DEBUG] Finished processing WinHttpProxy. Found 1 unique BasePath/Version combinations.
-[2025-05-04 23:23:44.842][WARNING] Skipping Example2.Diagnostics since it's on the ignorelist.
-[2025-05-04 23:23:44.845][WARNING] Skipping string since it's on the ignorelist.
-
-[2025-05-04 23:24:53.586][SUCCESS] Starting parallel module update check for 176 modules (Throttle: 24, Timeout: 90s)...
-[2025-05-04 23:24:53.648][DEBUG] Prepared 176 modules with valid version info for checking.
-[2025-05-04 23:24:56.468][SUCCESS] Job 2 completed. Found 'AOVPNTools' version 1.9.4.
-[2025-05-04 23:24:56.468][SUCCESS] Job 1 completed. Found 'ADEssentials' version 0.0.237.
-[2025-05-04 23:24:56.529][SUCCESS] Job 19 completed. Found 'AzureAD' version 2.0.2.182.
-[2025-05-04 23:24:57.022][SUCCESS] Job 15 completed. Found 'Az.Accounts' version 4.1.0.
-[2025-05-04 23:24:57.145][SUCCESS] Job 29 completed. Found 'BurntToast' version 1.0.0.
-[2025-05-04 23:24:57.153][WARNING] Filtering out BurntToast since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:24:57.377][SUCCESS] Job 35 completed. Found 'CommonStuff' version 1.0.22.
-[2025-05-04 23:24:57.869][SUCCESS] Job 41 completed. Found 'CompletionPredictor' version 0.1.1.
-[2025-05-04 23:24:58.025][SUCCESS] Job 47 completed. Found 'Defender' version 6.0.0.
-[2025-05-04 23:24:58.026][WARNING] Filtering out Defender since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:24:59.132][SUCCESS] Job 51 completed. Found 'DependencySearch' version 1.1.7.
-[2025-05-04 23:24:59.558][SUCCESS] Job 63 completed. Found 'DnsClient' version 1.8.0.
-[2025-05-04 23:24:59.563][WARNING] Filtering out DnsClient since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:24:59.943][SUCCESS] Job 69 completed. Found 'EditorServicesCommandSuite' version 1.0.0.
-[2025-05-04 23:24:59.994][DEBUG] Comparing pre-release versions: beta4 not newer then beta4
-[2025-05-04 23:25:00.007][SUCCESS] Job 65 completed. Found 'DnsServer' version 1.0.0.
-[2025-05-04 23:25:00.015][WARNING] Filtering out DnsServer since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:25:00.146][SUCCESS] Job 85 completed. Found 'ImportExcel' version 7.8.10.
-[2025-05-04 23:25:00.155][SUCCESS] Job 73 completed. Found 'ExchangeOnlineManagement' version 3.8.0.
-[2025-05-04 23:25:00.164][SUCCESS] Online pre-release 'Preview2' is newer than local 'Preview1' for version 3.8.0.
-[2025-05-04 23:25:00.194][SUCCESS] Update found for 'ExchangeOnlineManagement': Local '3.8.0-Preview1' -> Online '3.8.0'
-[2025-05-04 23:25:00.571][SUCCESS] Job 71 completed. Found 'EnhancedPSTools' version 0.0.38.
-[2025-05-04 23:25:00.648][SUCCESS] Job 77 completed. Found 'Get-NetView' version 2025.2.26.254.
-[2025-05-04 23:25:00.653][SUCCESS] Update found for 'Get-NetView': Local '2023.2.7.226' -> Online '2025.2.26.254'
-[2025-05-04 23:25:00.943][SUCCESS] Job 87 completed. Found 'Indented.Net.IP' version 6.3.2.
-[2025-05-04 23:25:01.320][SUCCESS] Job 83 completed. Found 'HtmlAgilityPack' version 1.12.1.
-[2025-05-04 23:25:01.320][SUCCESS] Job 93 completed. Found 'IntuneStuff' version 1.6.2.
-[2025-05-04 23:25:03.627][SUCCESS] Job 97 completed. Found 'iSCSI' version 1.5.5.1.
-[2025-05-04 23:25:03.665][WARNING] Filtering out iSCSI since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:25:04.574][SUCCESS] Job 109 completed. Found 'Microsoft.Graph' version 2.27.0.
-[2025-05-04 23:25:04.602][SUCCESS] Job 115 completed. Found 'Microsoft.Graph.Beta' version 2.27.0.
-[2025-05-04 23:25:04.618][SUCCESS] Job 107 completed. Found 'LSUClient' version 1.7.1.
-[2025-05-04 23:25:05.214][SUCCESS] Job 111 completed. Found 'Microsoft.Graph.Authentication' version 2.27.0.
-[2025-05-04 23:25:05.262][SUCCESS] Job 113 completed. Found 'Microsoft.Graph.Beta.DeviceManagement.Actions' version 2.25.0.
-[2025-05-04 23:25:05.359][SUCCESS] Update found for 'Microsoft.Graph.Beta.DeviceManagement.Actions': Local '2.24.0' -> Online '2.25.0'
-[2025-05-04 23:25:05.378][SUCCESS] Update found for 'Microsoft.Graph.Beta.DeviceManagement.Actions': Local '2.24.0' -> Online '2.25.0'
-[2025-05-04 23:25:05.419][SUCCESS] Job 125 completed. Found 'Microsoft.Graph.Beta.Groups' version 2.27.0.
-[2025-05-04 23:25:05.529][SUCCESS] Job 121 completed. Found 'Microsoft.Graph.Beta.DeviceManagement.Enrollment' version 2.27.0.
-[2025-05-04 23:25:05.710][SUCCESS] Job 119 completed. Found 'Microsoft.Graph.Beta.DeviceManagement.Administration' version 2.27.0.
-[2025-05-04 23:25:05.762][SUCCESS] Job 123 completed. Found 'Microsoft.Graph.Beta.Devices.CorporateManagement' version 2.27.0.
-[2025-05-04 23:25:05.973][SUCCESS] Job 129 completed. Found 'Microsoft.Graph.Beta.DeviceManagement.Functions' version 2.27.0.
-[2025-05-04 23:25:06.039][SUCCESS] Job 117 completed. Found 'Microsoft.Graph.Beta.DeviceManagement' version 2.27.0.
-[2025-05-04 23:25:06.044][SUCCESS] Job 133 completed. Found 'Microsoft.Graph.Beta.Users.Actions' version 2.27.0.
-[2025-05-04 23:25:06.090][SUCCESS] Job 135 completed. Found 'Microsoft.Graph.Beta.Users.Functions' version 2.27.0.
-[2025-05-04 23:25:06.099][SUCCESS] Job 127 completed. Found 'Microsoft.Graph.Beta.Identity.DirectoryManagement' version 2.27.0.
-[2025-05-04 23:25:06.356][SUCCESS] Job 131 completed. Found 'Microsoft.Graph.Beta.Users' version 2.27.0.
-[2025-05-04 23:25:07.468][SUCCESS] Job 137 completed. Found 'Microsoft.Graph.Core' version 3.2.4.
-[2025-05-04 23:25:07.684][SUCCESS] Job 143 completed. Found 'Microsoft.Graph.DeviceManagement.Administration' version 2.27.0.
-[2025-05-04 23:25:07.721][SUCCESS] Job 139 completed. Found 'Microsoft.Graph.DeviceManagement' version 2.27.0.
-[2025-05-04 23:25:07.821][SUCCESS] Job 141 completed. Found 'Microsoft.Graph.DeviceManagement.Actions' version 2.25.0.
-[2025-05-04 23:25:07.823][SUCCESS] Update found for 'Microsoft.Graph.DeviceManagement.Actions': Local '2.24.0' -> Online '2.25.0'
-[2025-05-04 23:25:07.852][SUCCESS] Update found for 'Microsoft.Graph.DeviceManagement.Actions': Local '2.24.0' -> Online '2.25.0'
-[2025-05-04 23:25:08.031][SUCCESS] Job 145 completed. Found 'Microsoft.Graph.DeviceManagement.Enrollment' version 2.27.0.
-[2025-05-04 23:25:08.152][SUCCESS] Job 147 completed. Found 'Microsoft.Graph.DeviceManagement.Functions' version 2.27.0.
-[2025-05-04 23:25:08.867][SUCCESS] Job 155 completed. Found 'Microsoft.Graph.Identity.DirectoryManagement' version 2.27.0.
-[2025-05-04 23:25:09.249][SUCCESS] Job 153 completed. Found 'Microsoft.Graph.Groups' version 2.27.0.
-[2025-05-04 23:25:09.482][SUCCESS] Job 151 completed. Found 'Microsoft.Graph.DirectoryObjects' version 2.27.0.
-[2025-05-04 23:25:09.802][SUCCESS] Job 159 completed. Found 'Microsoft.PowerApps.Administration.PowerShell' version 2.0.210.
-[2025-05-04 23:25:09.807][SUCCESS] Job 149 completed. Found 'Microsoft.Graph.Devices.CorporateManagement' version 2.27.0.
-[2025-05-04 23:25:10.322][SUCCESS] Job 157 completed. Found 'Microsoft.Graph.Intune' version 6.1907.1.0.
-[2025-05-04 23:25:10.664][SUCCESS] Job 161 completed. Found 'Microsoft.PowerShell.Archive' version 1.2.5.
-[2025-05-04 23:25:10.666][SUCCESS] Update found for 'Microsoft.PowerShell.Archive': Local '1.0.1.0' -> Online '1.2.5'
-[2025-05-04 23:25:11.214][SUCCESS] Job 173 completed. Found 'Microsoft.PowerShell.PSResourceGet' version 1.1.1.
-[2025-05-04 23:25:12.188][SUCCESS] Job 187 completed. Found 'MSAL.PS' version 4.37.0.0.
-[2025-05-04 23:25:12.238][SUCCESS] Job 177 completed. Found 'Microsoft.PowerShell.Security' version 7.6.0.
-[2025-05-04 23:25:12.250][DEBUG] Comparing pre-release versions: preview.4 not newer then preview.4
-[2025-05-04 23:25:12.254][WARNING] Filtering out Microsoft.PowerShell.Security since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:25:12.447][SUCCESS] Job 181 completed. Found 'Microsoft.WSMan.Management' version 7.6.0.
-[2025-05-04 23:25:12.483][DEBUG] Comparing pre-release versions: preview.4 not newer then preview.4
-[2025-05-04 23:25:12.492][WARNING] Filtering out Microsoft.WSMan.Management since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:25:12.553][SUCCESS] Job 189 completed. Found 'MSGraphStuff' version 1.1.1.
-[2025-05-04 23:25:16.711][SUCCESS] Job 229 completed. Found 'Pester' version 6.0.0.
-[2025-05-04 23:25:16.724][DEBUG] Comparing pre-release versions: alpha5 not newer then alpha5
-[2025-05-04 23:25:16.727][SUCCESS] Update found for 'Pester': Local '3.4.0' -> Online '6.0.0'
-[2025-05-04 23:25:16.917][SUCCESS] Job 225 completed. Found 'PackageManagement' version 1.4.8.1.
-[2025-05-04 23:25:16.939][SUCCESS] Update found for 'PackageManagement': Local '1.0.0.1' -> Online '1.4.8.1'
-[2025-05-04 23:25:17.474][SUCCESS] Job 237 completed. Found 'PolicyFileEditor' version 3.0.1.
-[2025-05-04 23:25:17.922][SUCCESS] Job 239 completed. Found 'PowerHTML' version 0.2.0.
-[2025-05-04 23:25:18.510][SUCCESS] Job 241 completed. Found 'PowerQuest' version 0.4.0.
-[2025-05-04 23:25:18.805][SUCCESS] Job 243 completed. Found 'PowerShellGet' version 3.0.23.
-[2025-05-04 23:25:18.810][SUCCESS] Update found for 'PowerShellGet': Local '2.2.5' -> Online '3.0.23'
-[2025-05-04 23:25:18.819][SUCCESS] Update found for 'PowerShellGet': Local '2.2.5' -> Online '3.0.23'
-[2025-05-04 23:25:18.827][DEBUG] Comparing pre-release versions: beta23 not newer then beta23
-[2025-05-04 23:25:18.829][SUCCESS] Update found for 'PowerShellGet': Local '1.0.0.1' -> Online '3.0.23'
-[2025-05-04 23:25:18.845][SUCCESS] Update found for 'PowerShellGet': Local '2.2.5' -> Online '3.0.23'
-[2025-05-04 23:25:18.852][DEBUG] Comparing pre-release versions: beta23 not newer then beta23
-[2025-05-04 23:25:18.859][SUCCESS] Update found for 'PowerShellGet': Local '2.2.5' -> Online '3.0.23'
-[2025-05-04 23:25:18.967][SUCCESS] Job 257 completed. Found 'PSDev' version 1.8.0.
-[2025-05-04 23:25:19.071][SUCCESS] Job 247 completed. Found 'ProcessMitigations' version 1.0.7.
-[2025-05-04 23:25:19.073][WARNING] Filtering out ProcessMitigations since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:25:19.165][SUCCESS] Job 255 completed. Found 'PSDesiredStateConfiguration' version 2.0.7.
-[2025-05-04 23:25:19.167][SUCCESS] Update found for 'PSDesiredStateConfiguration': Local '1.1' -> Online '2.0.7'
-[2025-05-04 23:25:19.383][SUCCESS] Job 251 completed. Found 'ps2exe' version 1.0.15.
-[2025-05-04 23:25:20.126][SUCCESS] Job 263 completed. Found 'PSEventViewer' version 2.4.3.
-[2025-05-04 23:25:20.650][SUCCESS] Job 261 completed. Found 'PSFramework' version 1.12.346.
-[2025-05-04 23:25:20.735][SUCCESS] Job 267 completed. Found 'PSModuleDevelopment' version 2.2.13.176.
-[2025-05-04 23:25:20.825][SUCCESS] Update found for 'PSModuleDevelopment': Local '2.2.12.172' -> Online '2.2.13.176'
-[2025-05-04 23:25:20.918][SUCCESS] Job 269 completed. Found 'PSReadLine' version 2.4.2.
-[2025-05-04 23:25:20.931][DEBUG] Comparing pre-release versions: beta2 not newer then beta2
-[2025-05-04 23:25:21.054][SUCCESS] Job 265 completed. Found 'PSPreworkout' version 1.8.3.
-[2025-05-04 23:25:21.180][SUCCESS] Job 271 completed. Found 'PSSharedGoods' version 0.0.307.
-[2025-05-04 23:25:21.820][SUCCESS] Job 279 completed. Found 'PSWriteHTML' version 1.28.0.
-[2025-05-04 23:25:22.001][SUCCESS] Job 277 completed. Found 'PSWindowsUpdate' version 2.2.1.5.
-[2025-05-04 23:25:22.800][SUCCESS] Job 283 completed. Found 'Refactor' version 1.2.25.
-[2025-05-04 23:25:23.195][SUCCESS] Job 287 completed. Found 'RemoteDesktop' version 0.0.0.2.
-[2025-05-04 23:25:23.199][WARNING] Filtering out RemoteDesktop since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:25:23.411][SUCCESS] Job 299 completed. Found 'SharePointPnPPowerShellOnline' version 3.29.2101.0.
-[2025-05-04 23:25:23.909][SUCCESS] Job 291 completed. Found 'ScheduledTasks' version 1.0.2.
-[2025-05-04 23:25:23.911][WARNING] Filtering out ScheduledTasks since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:25:24.725][SUCCESS] Job 305 completed. Found 'SplitPipeline' version 2.0.0.
-[2025-05-04 23:25:25.397][SUCCESS] Job 313 completed. Found 'ThreadJob' version 2.1.0.
-[2025-05-04 23:25:26.426][SUCCESS] Job 319 completed. Found 'tls' version 1.0.2.
-[2025-05-04 23:25:26.430][WARNING] Filtering out tls since -MatchAuthor is used and the Authors doesn't match.
-[2025-05-04 23:25:27.099][SUCCESS] Job 337 completed. Found 'WindowsAutoPilotIntune' version 5.7.
-[2025-05-04 23:25:54.408][SUCCESS] Completed check of 176 modules in 30,8 seconds. Found 5 updates.
-
-GalleryAuthor       : Microsoft Corporation
-PreReleaseVersion   :
-HighestLocalVersion : 1.4.8.1
-OutdatedModules     : @{Path=C:\Program Files\WindowsPowerShell\Modules\PackageManagement; InstalledVersion=1.0.0.1}
-Author              : Microsoft Corporation
-ModuleName          : PackageManagement
-IsPreview           : False
-LatestVersionString : 1.4.8.1
-Repository          : PSGallery
-LatestVersion       : 1.4.8.1
-
-GalleryAuthor       : Microsoft Corporation
-PreReleaseVersion   :
-HighestLocalVersion : 1.2.5
-OutdatedModules     : @{Path=C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Archive; InstalledVersion=1.0.1.0}
-Author              : Microsoft Corporation
-ModuleName          : Microsoft.PowerShell.Archive
-IsPreview           : False
-LatestVersionString : 1.2.5
-Repository          : PSGallery
-LatestVersion       : 1.2.5
-
-GalleryAuthor       : Microsoft Corporation
-PreReleaseVersion   :
-HighestLocalVersion : 2.25.0
-OutdatedModules     : @{Path=C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.Graph.Beta.DeviceManagement.Actions; InstalledVersion=2.24.0}
-Author              : Microsoft Corporation
-ModuleName          : Microsoft.Graph.Beta.DeviceManagement.Actions
-IsPreview           : False
-LatestVersionString : 2.25.0
-Repository          : PSGallery
-LatestVersion       : 2.25.0
-
-GalleryAuthor       : Microsoft Corporation
-PreReleaseVersion   :
-HighestLocalVersion : 2.25.0
-OutdatedModules     : @{Path=C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.Graph.DeviceManagement.Actions; InstalledVersion=2.24.0}
-Author              : Microsoft Corporation
-ModuleName          : Microsoft.Graph.DeviceManagement.Actions
-IsPreview           : False
-LatestVersionString : 2.25.0
-Repository          : PSGallery
-LatestVersion       : 2.25.0
-
-GalleryAuthor       : Friedrich Weinmann
-PreReleaseVersion   :
-HighestLocalVersion : 2.2.12.172
-OutdatedModules     : @{Path=C:\Program Files\PowerShell\Modules\PSModuleDevelopment; InstalledVersion=2.2.12.172}
-Author              : Friedrich Weinmann
-ModuleName          : PSModuleDevelopment
-IsPreview           : False
-LatestVersionString : 2.2.13.176
-Repository          : PSGallery
-LatestVersion       : 2.2.13.176
-
-[2025-05-04 23:27:20.880][INFO] Starting update process for 1 modules.
-[2025-05-04 23:27:20.887][INFO] [1/1] Processing update for [PackageManagement] to version [1.4.8.1] (Preview=False) from [PSGallery].
-[2025-05-04 23:27:20.896][DEBUG] Attempting update for 'PackageManagement' in base paths: C:\Program Files\WindowsPowerShell\Modules\PackageManagement
-[2025-05-04 23:27:20.914][DEBUG] Attempting Save-PSResource for [PackageManagement] version [v1.4.8.1] to 'C:\Program Files\WindowsPowerShell\Modules'...
-[2025-05-04 23:27:21.746][SUCCESS] Successfully saved [PackageManagement] version [v1.4.8.1] via Save-PSResource to 'C:\Program Files\WindowsPowerShell\Modules\PackageManagement'
-[2025-05-04 23:27:21.753][SUCCESS] Successfully updated [PackageManagement] v1.4.8.1 for all target destinations.
-[2025-05-04 23:27:21.755][INFO] Update successful for 'PackageManagement'. Proceeding with cleaning old versions...
-[2025-05-04 23:27:21.758][INFO] Starting cleanup of old versions for [PackageManagement] (keeping v1.4.8.1)...
-[2025-05-04 23:27:21.760][DEBUG] Checking for old versions within 'C:\Program Files\WindowsPowerShell\Modules\PackageManagement'...
-[2025-05-04 23:27:21.765][DEBUG] Found old version folder: 'C:\Program Files\WindowsPowerShell\Modules\PackageManagement\1.0.0.1'. Attempting removal...
-[2025-05-04 23:27:21.987][WARNING] Uninstall-PSResource ran for '1.0.0.1' but folder 'C:\Program Files\WindowsPowerShell\Modules\PackageManagement\1.0.0.1' still exists. Will attempt Remove-Item.
-[2025-05-04 23:27:22.225][SUCCESS] Successfully removed old folder 'C:\Program Files\WindowsPowerShell\Modules\PackageManagement\1.0.0.1' via Remove-Item.
-[2025-05-04 23:27:22.231][SUCCESS] Successfully cleaned 1 old items for 'PackageManagement'.
-[2025-05-04 23:27:22.237][SUCCESS] Update process finished. Successful: 1, Failed/Partial: 0 (of 1).
-
-ModuleName           : PackageManagement
-NewVersionPreRelease : 1.4.8.1
-NewVersion           : 1.4.8.1
-UpdatedPaths         : C:\Program Files\WindowsPowerShell\Modules\PackageManagement
-FailedPaths          :
-OverallSuccess       : True
-CleanedPaths         : C:\Program Files\WindowsPowerShell\Modules\PackageManagement\1.0.0.1
-
+[2025-05-07 08:56:04.781][INFO] Phase 2 complete. Parallel processing took 0:00:03,1580879. Collected 370 raw entries.
+[2025-05-07 08:56:04.782][INFO] Phase 3: Starting post-processing and aggregation...
+[2025-05-07 08:56:04.792][DEBUG] Reduced to 333 unique entries after initial grouping.
+[2025-05-07 08:56:04.940][INFO] Phase 3 (Aggregation) complete in 0:00:00,15693.
+[2025-05-07 08:56:04.942][SUCCESS] Get-ModuleInfo completed. Total duration: 0:00:03,4650104. Found 190 modules.
+[2025-05-07 08:56:05.003][INFO] Starting online version pre-fetching for up to 190 modules...
+[2025-05-07 08:56:06.932][INFO] Waiting for 190 pre-fetch jobs to complete (Timeout per job: 120s)...
+[2025-05-07 08:56:13.192][INFO] Online version pre-fetching complete. Cached data for 190 modules. Timeouts: 0
+[2025-05-07 08:56:13.193][INFO] Pre-fetching (Stage 1) took: 0:00:08,1892482
+...
+[2025-05-07 08:56:13.740][DEBUG] Progress: 94% (182/190) | Updates: 11, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-07 08:56:13.740][WARNING] [WindowsPackageCab] No suitable online module version determined from pre-fetched data.
+[2025-05-07 08:56:13.741][WARNING] [WindowsSearch] No suitable online module version determined from pre-fetched data.
+[2025-05-07 08:56:13.741][WARNING] [WindowsUpdate] No suitable online module version determined from pre-fetched data.
+[2025-05-07 08:56:13.743][WARNING] [WinHttpProxy] No suitable online module version determined from pre-fetched data.
+[2025-05-07 08:56:13.746][INFO] Pre-fetching (Stage 1) duration: 0:00:08,1892482
+[2025-05-07 08:56:13.747][INFO] Comparison (Stage 2) duration: 0:00:00,5525648
+[2025-05-07 08:56:13.749][SUCCESS] Completed check of 190 modules in 0:00:08,741813. Found 11 modules needing updates.
 #>
-# Assume New-Log function is defined elsewhere or via:
-# Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
 function Check-PSResourceRepository {
+	<#
+	.SYNOPSIS
+	Ensures required PowerShell repositories (PSGallery, NuGetGallery, NuGet) are registered, trusted, and prioritized correctly using PSResourceGet cmdlets. Optionally installs or updates core dependency modules.
+	.DESCRIPTION
+	This function performs several setup tasks for reliable PowerShell module management using PSResourceGet cmdlets:
+	1. Checks and enables the TLS 1.2 security protocol for the current session if not already enabled.
+	2. Verifies if the PSGallery repository is registered. If it is, it ensures its InstallationPolicy is set to Trusted. This initial trust setting for PSGallery is performed using `Set-PSRepository` (a legacy cmdlet from the PowerShellGet module) as a robust way to ensure PSGallery is trusted before `Microsoft.PowerShell.PSResourceGet` cmdlets, which might be missing, are used or installed.
+	3. (Optional) If -ImportDependencies is specified, or if core PSResourceGet cmdlets (like `Register-PSResourceRepository`) are missing, it attempts to install or update the latest pre-release versions of 'Microsoft.PowerShell.PSResourceGet' and 'PowerShellGet' from PSGallery. It uses `Install-PSResource` if available, falling back to `Install-Module`. Modules are installed with `Scope = AllUsers` and then imported.
+	4. Registers or configures the PSGallery, NuGetGallery, and NuGet repositories.
+	- For PSGallery: If it exists, `Set-PSResourceRepository` is used to ensure it has Priority 30 and is Trusted. If it doesn't exist, it's registered using `Register-PSResourceRepository` with these settings.
+	- For NuGetGallery and NuGet: `Register-PSResourceRepository` is used to register them (or update if already existing using -Force) with specific URIs, priorities (NuGetGallery: 40, NuGet: 50), and as Trusted. NuGet repository is configured to use API version 'v2'.
+	5. Requires administrative privileges to modify repositories and install modules for AllUsers scope.
+	It utilizes internal helper functions (Install-RequiredModulesInternal, Register-ConfigureRepositoryInternal) and logs actions using a `New-Log` function (assumed to be available in the scope).
+	.PARAMETER ImportDependencies
+	If specified, forces the function to check for, install/update, and import the 'Microsoft.PowerShell.PSResourceGet' and 'PowerShellGet' modules, even if the core cmdlets seem available.
+	.PARAMETER ForceInstall
+	Used in conjunction with -ImportDependencies. If specified, forces a reinstallation (using -Reinstall or -Force parameters of the underlying cmdlets) of the dependency modules ('Microsoft.PowerShell.PSResourceGet', 'PowerShellGet'), even if they appear to be up-to-date.
+	.INPUTS
+	None. This function does not accept pipeline input.
+	.OUTPUTS
+	None. This function primarily modifies system state (repositories, installed modules) and outputs log messages via the `New-Log` function.
+	.EXAMPLE
+	PS C:\> Check-PSResourceRepository
+	Checks and configures the standard PowerShell repositories (PSGallery, NuGetGallery, NuGet). If required PSResourceGet cmdlets are missing, it will attempt to install them first. Requires Administrator privileges.
+	.EXAMPLE
+	PS C:\> Check-PSResourceRepository -ImportDependencies
+	Checks and configures repositories, and also explicitly ensures the latest pre-release versions of 'Microsoft.PowerShell.PSResourceGet' and 'PowerShellGet' are installed and imported.
+	.EXAMPLE
+	PS C:\> Check-PSResourceRepository -ImportDependencies -ForceInstall
+	Checks and configures repositories, and forces a re-installation of the latest pre-release versions of 'Microsoft.PowerShell.PSResourceGet' and 'PowerShellGet'.
+	.NOTES
+	- Requires Administrator privileges to run successfully as it modifies system-wide repository settings and installs modules to the AllUsers scope.
+	- Depends on an external `New-Log` function for logging operations. This function must be available in the calling scope.
+	- Assumes network connectivity to PSGallery and NuGet sources for repository registration and module installation.
+	- Primarily uses `*-PSResource*` cmdlets for repository management and module installation. It may fall back to older `*-Module` and `*-PSRepository` cmdlets for initial dependency bootstrapping (installing `Microsoft.PowerShell.PSResourceGet`) or specific PSGallery trust settings if `Microsoft.PowerShell.PSResourceGet` is not yet available.
+	- Installs dependency modules ('Microsoft.PowerShell.PSResourceGet', 'PowerShellGet') with `Scope = AllUsers`.
+	.LINK
+	Set-PSRepository
+	Get-PSRepository
+	Register-PSResourceRepository
+	Set-PSResourceRepository
+	Get-PSResourceRepository
+	Install-PSResource
+	Install-Module
+	Find-Module
+	Import-Module
+	#>
 	[CmdletBinding()]
 	param (
 		[switch]$ImportDependencies,
 		[switch]$ForceInstall
 	)
+	# --- Internal Helper Function: Install-RequiredModulesInternal ---
 	function Install-RequiredModulesInternal {
+		[CmdletBinding()]
 		param (
 			[switch]$ForceReinstall
 		)
 		try {
-			$psGallery = Get-PSRepository -Name 'PSGallery' -ErrorAction SilentlyContinue
+			$psGallery = Get-PSRepository -Name 'PSGallery' -ErrorAction SilentlyContinue -Verbose:$false
 			if ($null -eq $psGallery -or -not $psGallery.Trusted) {
-				New-Log "Setting PSGallery repository to Trusted." -Level INFO
-				Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted -ErrorAction Stop
+				New-Log "Setting PSGallery repository to Trusted."
+				Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted -ErrorAction Stop -Verbose:$false
 				New-Log "PSGallery repository set to trusted." -Level SUCCESS
 			}
 			else {
-				New-Log "PSGallery repository is already trusted." -Level INFO
+				New-Log "PSGallery repository is already trusted."
 			}
 			$moduleList = @(
 				@{ Name = 'Microsoft.PowerShell.PSResourceGet'; Prerelease = $true }
@@ -428,182 +107,202 @@ function Check-PSResourceRepository {
 		catch {
 			New-Log "Failed to set PSGallery repository to Trusted." -Level ERROR
 		}
-		$usePSResourceCmdlets = Get-Command Install-PSResource -ErrorAction SilentlyContinue
+		$usePSResourceCmdlets = Get-Command Install-PSResource -ErrorAction SilentlyContinue -Verbose:$false
 		$moduleSuccess = $true
 		foreach ($moduleInfo in $moduleList) {
 			$moduleName = $moduleInfo.Name
 			$installPrerelease = $moduleInfo.Prerelease
-			$foundModule = Find-Module -Name $moduleName -Repository @('PSGallery') -AllowPrerelease:$installPrerelease -ErrorAction SilentlyContinue
+			$foundModule = Find-Module -Name $moduleName -Repository @('PSGallery') -AllowPrerelease:$installPrerelease -ErrorAction SilentlyContinue -Verbose:$false
 			$latestVersion = ($foundModule | Sort-Object Version -Descending | Select-Object -First 1).Version
 			$isInstalled = $false
 			if ($latestVersion) {
-				$isInstalled = Get-module -Name $moduleName -ListAvailable | Where-Object { $_.Version -eq $latestVersion } | Select-Object -First 1
+				$isInstalled = Get-module -Name $moduleName -ListAvailable -Verbose:$false | Where-Object { $_.Version -eq $latestVersion } | Select-Object -First 1
 			}
 			else {
 				New-Log "Could not find module $moduleName in PSGallery to check installation status." -Level WARNING
 			}
 			if ($ForceReinstall -or !$isInstalled) {
-				New-Log "Attempting to install/update module '$moduleName' ($($ForceReinstall ? 'Forced Reinstall' : ($isInstalled ? 'Update' : 'Install')))..." -Level INFO
+				New-Log "Attempting to install/update module '$moduleName' ($($ForceReinstall ? 'Forced Reinstall' : ($isInstalled ? 'Update' : 'Install')))..."
 				$commonInstallParams = @{
 					Name          = $moduleName
 					Scope         = 'AllUsers'
 					AcceptLicense = $true
 					Confirm       = $false
 					PassThru      = $true
-					ErrorAction   = 'SilentlyContinue'
+					ErrorAction   = 'SilentlyContinue' # Changed to SilentlyContinue to allow fallback
 					WarningAction = 'SilentlyContinue'
 				}
 				$res = $null
 				if ($usePSResourceCmdlets) {
-					New-Log "Using Install-PSResource for '$moduleName'." -Level INFO
+					New-Log "Using Install-PSResource for '$moduleName'."
 					$installParams = @{
 						Reinstall       = $ForceReinstall
 						TrustRepository = $true
-						Repository      =	@('PSGallery')
+						Repository      = @('PSGallery')
 					} + $commonInstallParams
 					if ($installPrerelease) { $installParams.Add('Prerelease', $true) }
-					$res = Install-PSResource @installParams
+					$res = Install-PSResource @installParams -Verbose:$false
 				}
+				# Fallback to Install-Module if Install-PSResource failed or wasn't available
 				if (!$res -or !$usePSResourceCmdlets) {
 					if ($usePSResourceCmdlets -and !$res) {
 						New-Log "Install-PSResource failed or returned no result. Trying Install-Module..." -Level WARNING
 					}
 					else {
-						New-Log "Trying with Install-Module for '$moduleName'." -Level INFO
+						New-Log "Trying with Install-Module for '$moduleName'."
 					}
 					$installParams = @{
 						Force = $ForceReinstall
 					} + $commonInstallParams
 					if ($installPrerelease) { $installParams.Add('AllowPrerelease', $true) }
-					$res = Install-Module @installParams
+					$res = Install-Module @installParams -Verbose:$false
 				}
 				if ($res) {
 					New-Log "Successfully installed/updated module '$moduleName'." -Level SUCCESS
 				}
 				elseif (!$res -and $isInstalled) {
-					New-Log "Could not force an reinstall/update of '$moduleName'. Target version [$($latestVersion)] is already installed." -Level INFO
+					New-Log "Could not force an reinstall/update of '$moduleName'. Target version [$($latestVersion)] is already installed."
 				}
 				else {
 					New-Log "Could not install/update '$moduleName'" -Level WARNING
-					$moduleSuccess = $false
+					$moduleSuccess = $false # Mark failure if install/update didn't succeed
 				}
 			}
 			else {
-				New-Log "Module '$moduleName' version [$latestVersion] is already installed and available." -Level INFO
+				New-Log "Module '$moduleName' version [$latestVersion] is already installed and available."
 			}
+			# Attempt to import the module regardless of install status to ensure it's loaded
 			try {
-				Import-Module -Name $moduleName -Force -ErrorAction Stop
+				Import-Module -Name $moduleName -Force -ErrorAction Stop -Verbose:$false
 				New-Log "Successfully imported module '$moduleName'." -Level SUCCESS
 			}
 			catch {
-				New-Log "Failed to import module '$moduleName' after check/install attempt. Error: $($_.Exception.Message)" -Level ERROR
-				$moduleSuccess
+				New-Log "Failed to import module '$moduleName' after check/install attempt." -Level ERROR
+				$moduleSuccess = $false # Mark failure if import fails
 			}
 		}
 		return $moduleSuccess
 	}
+	# --- Internal Helper Function: Register-ConfigureRepositoryInternal ---
 	function Register-ConfigureRepositoryInternal {
+		[CmdletBinding()]
 		param (
-			[Parameter(Mandatory = $true)][string]$Name,
+			[Parameter(Mandatory)][string]$Name,
 			[string]$Uri,
-			[Parameter(Mandatory = $true)][int]$Priority,
+			[Parameter(Mandatory)][int]$Priority,
 			[string]$ApiVersion = 'v3',
 			[switch]$IsPSGallery
 		)
 		try {
-			$repository = Get-PSResourceRepository -Name $Name -ErrorAction SilentlyContinue
+			$repository = Get-PSResourceRepository -Name $Name -ErrorAction SilentlyContinue -Verbose:$false
+			# Determine if an update is needed
 			$needsUpdate = ($null -eq $repository) -or ($repository.Priority -ne $Priority) -or (-not $repository.Trusted)
 			if (-not $IsPSGallery -and $Uri -and $repository) {
+				# Also check URI for non-PSGallery repos if they exist
 				$needsUpdate = $needsUpdate -or ($repository.Uri.AbsoluteUri -ne $Uri)
 			}
 			if ($needsUpdate) {
-				New-Log "Registering/Updating repository '$Name' (Priority: $Priority, Trusted: True)." -Level INFO
+				New-Log "Registering/Updating repository '$Name' (Priority: $Priority, Trusted: True)."
 				$commonRegisterParams = @{
 					Name        = $Name
-					Force       = $true
+					Force       = $true # Use Force to overwrite/update existing registration
 					Trusted     = $true
 					Priority    = $Priority
-					Confirm     = $false
-					ErrorAction = 'Stop'
+					Confirm     = $false # Suppress confirmation prompts
+					ErrorAction = 'Stop' # Stop on error for this specific operation
 				}
-				$registerParams = @{} + $commonRegisterParams
 				if ($IsPSGallery) {
-					Set-PSResourceRepository -Name $Name -Priority $Priority -InstallationPolicy Trusted -ErrorAction Stop
+					# Special handling for PSGallery - cannot set URI, use Set-PSResourceRepository
+					Set-PSResourceRepository -Name $Name -Priority $Priority -InstallationPolicy Trusted -ErrorAction Stop -Verbose:$false
 				}
 				else {
+					# For other repositories, use Register-PSResourceRepository
+					$registerParams = @{} + $commonRegisterParams
 					$registerParams.Uri = $Uri
 					if ($ApiVersion -eq 'v2') {
 						$registerParams.Add('ApiVersion', $ApiVersion)
-						New-Log "Using API Version V2 for '$Name'." -Level INFO
+						New-Log "Using API Version V2 for '$Name'."
 					}
-					Register-PSResourceRepository @registerParams
+					Register-PSResourceRepository @registerParams -Verbose:$false
 				}
 				New-Log "Successfully registered/updated '$Name' repository resource." -Level SUCCESS
 			}
 			else {
-				New-Log "'$Name' repository is already registered and configured correctly." -Level INFO
+				New-Log "'$Name' repository is already registered and configured correctly."
 			}
-			return $true
+			return $true # Indicate success for this repository
 		}
 		catch {
-			New-Log "Failed to register/configure '$Name' repository. Error: $($_.Exception.Message)" -Level ERROR
-			return $false
+			New-Log "Failed to register/configure '$Name' repository." -Level ERROR
+			return $false # Indicate failure for this repository
 		}
 	}
+	# --- Main Function Logic ---
+	# Check for Admin privileges
 	if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 		New-Log "Administrator privileges are required to manage repositories and install modules with -Scope AllUsers. Aborting." -Level WARNING
-		return
+		return # Exit if not admin
 	}
-	$overallSuccess = $true
+	$overallSuccess = $true # Track overall success
+	# Ensure TLS 1.2 is enabled
 	try {
 		$existingProtocols = [Net.ServicePointManager]::SecurityProtocol
 		$tls12Enum = [Net.SecurityProtocolType]::Tls12
 		if (-not ($existingProtocols -band $tls12Enum)) {
 			[Net.ServicePointManager]::SecurityProtocol = $existingProtocols -bor $tls12Enum
-			New-Log "TLS 1.2 security protocol enabled for this session." -Level INFO
+			New-Log "TLS 1.2 security protocol enabled for this session."
 		}
 		else {
-			New-Log "TLS 1.2 security protocol was already enabled." -Level INFO
+			New-Log "TLS 1.2 security protocol was already enabled."
 		}
 	}
 	catch {
 		New-Log "Unable to set TLS 1.2 security protocol. Network operations might fail." -Level ERROR
 	}
-	$psResourceCmdletAvailable = Get-Command Register-PSResourceRepository -ErrorAction SilentlyContinue
+	# Check if PSResourceGet cmdlets are available, install if needed or forced
+	$psResourceCmdletAvailable = Get-Command Register-PSResourceRepository -ErrorAction SilentlyContinue -Verbose:$false
 	if (!$psResourceCmdletAvailable -or $ImportDependencies.IsPresent) {
 		if (!$psResourceCmdletAvailable) {
 			New-Log "Required command 'Register-PSResourceRepository' not found. Attempting to install dependencies..." -Level WARNING
 		}
 		else {
-			New-Log "Parameter -ImportDependencies specified. Checking/installing dependencies..." -Level INFO
+			New-Log "Parameter -ImportDependencies specified. Checking/installing dependencies..."
 		}
+		# Call internal function to install/update modules
 		if (-not (Install-RequiredModulesInternal -ForceReinstall:$ForceInstall.IsPresent)) {
 			New-Log "Failed to install or import required modules (PowerShellGet/Microsoft.PowerShell.PSResourceGet). Repository configuration might fail." -Level WARNING
-			if (-not (Get-Command Register-PSResourceRepository -ErrorAction SilentlyContinue)) {
+			# Check again if the command is available *after* the attempt
+			if (-not (Get-Command Register-PSResourceRepository -ErrorAction SilentlyContinue -Verbose:$false)) {
 				New-Log "Required command 'Register-PSResourceRepository' is STILL not available after installation attempt. Aborting repository configuration." -Level ERROR
-				return
+				return # Abort if essential command is still missing
 			}
 		}
-		if (-not (Get-Command Register-PSResourceRepository -ErrorAction SilentlyContinue)) {
+		# Verify command availability again after potential install/import
+		if (-not (Get-Command Register-PSResourceRepository -ErrorAction SilentlyContinue -Verbose:$false)) {
 			New-Log "Required command 'Register-PSResourceRepository' is still not available after installation attempt. Aborting repository configuration." -Level ERROR
-			return
+			return # Abort if still missing
 		}
-		New-Log "Required module commands are now available." -Level SUCCESS
+		else {
+			New-Log "Required module commands are now available." -Level SUCCESS
+		}
 	}
 	else {
-		New-Log "Required module commands (PSResourceGet) are already available." -Level INFO
+		New-Log "Required module commands (PSResourceGet) are already available."
 	}
+	# Define repositories to configure
 	$repositories = @(
-		@{ Name = 'PSGallery'; Uri = 'https://www.powershellgallery.com/api/v2'; Priority = 30; IsPSGallery = $true }
+		@{ Name = 'PSGallery'; Uri = 'https://www.powershellgallery.com/api/v2'; Priority = 30; IsPSGallery = $true } # PSGallery uses Set-PSResourceRepository
 		@{ Name = 'NuGetGallery'; Uri = 'https://api.nuget.org/v3/index.json'; Priority = 40 }
-		@{ Name = 'NuGet'; Uri = 'http://www.nuget.org/api/v2'; Priority = 50; ApiVersion = 'v2' }
+		@{ Name = 'NuGet'; Uri = 'http://www.nuget.org/api/v2'; Priority = 50; ApiVersion = 'v2' } # Explicitly V2 API
 	)
-	New-Log "Starting repository configuration..." -Level INFO
+	New-Log "Starting repository configuration..."
+	# Configure each repository
 	foreach ($repo in $repositories) {
-		if (-not (Register-ConfigureRepositoryInternal @repo)) {
-			$overallSuccess = $false
+		if (-not (Register-ConfigureRepositoryInternal @repo -Verbose:$false)) {
+			$overallSuccess = $false # Update overall status if any repo fails
 		}
 	}
+	# Final status message
 	if ($overallSuccess) {
 		New-Log "All specified repositories appear to be registered and configured." -Level SUCCESS
 	}
@@ -611,347 +310,241 @@ function Check-PSResourceRepository {
 		New-Log "One or more repositories could not be configured correctly. Please check previous error messages." -Level WARNING
 	}
 }
+#endregion Check-PSResourceRepository
+#region Get-ModuleInfo
 function Get-ModuleInfo {
+	<#
+	.SYNOPSIS
+	Scans specified paths for PowerShell module manifest files (.psd1) and PSGetModuleInfo.xml files, processing them in parallel to gather module metadata.
+	.DESCRIPTION
+	This function discovers and processes PowerShell module files to create a comprehensive inventory. It operates in three main phases:
+	1.  *Helper Function Preparation:** Collects definitions of internal helper functions (like `Parse-ModuleVersion`, `Get-ManifestVersionInfo`, etc.) as strings to make them available within parallel processing scopes.
+	2.  *Phase 1: File Discovery:** Recursively scans the provided `-Paths` for all files ending in `.psd1` (module manifests) and files named `PSGetModuleInfo.xml` (often created by `Save-PSResource -IncludeXml`).
+	3.  *Phase 2: Parallel File Processing:** Each discovered file is processed in parallel using `ForEach-Object -Parallel`.
+	Inside the parallel task, helper functions are restored using `Invoke-Expression`.
+	Likely resource files (e.g., localization files) are skipped using the `Test-IsResourceFile` helper.
+	For `.psd1` files:
+	`Test-ModuleManifest` is called to validate and get basic manifest data.
+	The output of `Test-ModuleManifest` is preferably processed by `Get-ManifestVersionInfo -Quick`.
+	If `Test-ModuleManifest` fails or its output is insufficient, `Get-ManifestVersionInfo -ModuleFilePath` is used as a fallback, attempting to infer details from the file path.
+	Extracted metadata (ModuleName, ModuleVersion, BasePath, Author, pre-release info) is added to a thread-safe `ConcurrentBag`.
+	For `PSGetModuleInfo.xml` files:
+	`Get-ModuleInfoFromXml` is called to parse the XML and extract metadata.
+	Extracted metadata is added to the `ConcurrentBag`.
+	4.  *Phase 3: Aggregation and Normalization:**
+	The collected module entries from the `ConcurrentBag` are converted to an array.
+	Initial deduplication is performed by grouping entries by ModuleName, BasePath, and ModuleVersionString.
+	Further processing groups modules by name. For each name group:
+	Module base paths are normalized. This involves logic to identify the true root directory of a module, especially when version numbers are part of the directory structure (e.g., ensuring 'C:\Modules\MyModule\1.0' and 'C:\Modules\MyModule\1.1' both resolve 'C:\Modules\MyModule' as the base path).
+	Modules are then grouped by these normalized base paths.
+	Within each base path group, versions are grouped to select a single representative entry (preferring entries with `[System.Version]` objects over strings if both exist for the same version identifier).
+	The final, aggregated module data is stored in an ordered hashtable, where each key is a module name and the value is an array of `PSCustomObject`s, each representing a unique installation location and version of that module.
+	Modules specified in the `-IgnoredModules` parameter are filtered out from the final result.
+	The function returns this ordered hashtable, providing a structured inventory of all discovered modules.
+	.PARAMETER Paths
+	[Mandatory] An array of strings, where each string is a path to a directory to be scanned recursively for module files. Typically, this would be paths from `$env:PSModulePath`.
+	.PARAMETER IgnoredModules
+	An array of strings containing module names to be excluded from the final results. Defaults to an empty array.
+	.PARAMETER ThrottleLimit
+	The maximum number of parallel threads to use for processing files in Phase 2. Defaults to `([System.Environment]::ProcessorCount * 2)`.
+	.INPUTS
+	None. This function does not accept pipeline input.
+	.OUTPUTS
+	System.Collections.Specialized.OrderedDictionary
+	Returns an ordered hashtable where:
+	- Each key is a [string] representing a unique module name found.
+	- Each value is an array of [PSCustomObject]s. Each PSCustomObject represents a distinct installation of that module and contains properties like:
+	- ModuleName ([string])
+	- ModuleVersion ([System.Version])
+	- ModuleVersionString ([string])
+	- BasePath ([string]): The normalized root directory of this module installation.
+	- IsPreRelease ([bool])
+	- PreReleaseLabel ([string])
+	- Author ([string])
+	If no module files are found, an empty ordered hashtable is returned.
+	.EXAMPLE
+	PS C:\> $moduleInventory = Get-ModuleInfo -Paths ($env:PSModulePath -split ';') -IgnoredModules 'Pester','MyCustomDevModule'
+	Scans all standard module paths, processes found module files in parallel, and returns an inventory excluding 'Pester' and 'MyCustomDevModule'.
+	.NOTES
+	- Requires PowerShell 7.0 or later due to the use of `ForEach-Object -Parallel`.
+	- Relies on several internal helper functions (e.g., `Parse-ModuleVersion`, `Get-ManifestVersionInfo`, `Get-ModuleformPath`, `Test-IsResourceFile`, `Get-ModuleInfoFromXml`) which must be defined in the same scope.
+	- Depends on an external `New-Log` function for logging operations.
+	- The accuracy of `BasePath` normalization depends on common module directory structures.
+	.LINK
+	Test-ModuleManifest
+	Get-ChildItem
+	ForEach-Object -Parallel
+	Invoke-Expression
+	#>
 	[CmdletBinding()]
 	param(
-		[Parameter(Mandatory)]
-		[string[]]$Paths,
+		[Parameter(Mandatory)][string[]]$Paths,
 		[string[]]$IgnoredModules = @(),
-		[switch]$Force
+		[int]$ThrottleLimit = ([System.Environment]::ProcessorCount * 2) # Increased default, file processing is often quick
 	)
-	function Get-ManifestVersionInfo {
-		[CmdletBinding()]
-		param (
-			[Parameter(Mandatory = $true, ValueFromPipeline)][object]$ManifestData,
-			[switch]$Quick,
-			[object]$ResData,
-			[string]$ModuleFilePath
-		)
-		begin {
-			function Add-VersionCandidate {
-				[CmdletBinding()]
-				param(
-					[string]$VersionString
-				)
-				if (-not [string]::IsNullOrWhiteSpace($VersionString)) {
-					try {
-						$baseVersionString = $VersionString -replace '-.*$' # Remove potential prerelease tag for parsing
-						$versionObject = [version]$baseVersionString
-						$candidateVersions.Add([PSCustomObject]@{
-								VersionObject = $versionObject # Parsed [version] for comparison
-								VersionString = "$VersionString" # Original full string
-							})
-					}
-					catch {
-						New-Log "Could not parse version string '$VersionString'" -Level ERROR
-					}
-				}
-			}
-		}
-		process {
-			if ($Quick -and $ManifestData) {
-				try {
-					$higestVersion = [version]$ManifestData.Version
-				}
-				catch {
-					$higestVersion = $ManifestData.Version
-				}
-				return [PSCustomObject]@{
-					ModuleName           = if ($ManifestData.Name) { $ManifestData.Name } else { $null }
-					HighestVersion       = if ($higestVersion) { $higestVersion } else { $null } # The [version] object
-					HighestVersionString = if ($ManifestData.Version) { "$($ManifestData.Version)" } else { $null } # The original string
-					IsPreRelease         = if ($ManifestData.PreRelease) { $true } else { $false }
-					PreReleaseLabel      = if ($ManifestData.PreRelease) { $ManifestData.PreRelease } else { $null }
-					BasePath             = if ($ManifestData.ModuleBase) { $ManifestData.ModuleBase } else { $null }
-				}
-			}
-			if (!$ManifestData.Name) {
-				$moduleName = $resData.Name
-			}
-			else {
-				$moduleName = $ManifestData.Name
-			}
-			$candidateVersions = [System.Collections.Generic.List[object]]::new()
-			if ($ManifestData.ModuleVersion) {
-				Add-VersionCandidate -VersionString $ManifestData.ModuleVersion
-			}
-			if ($ManifestData.Version) {
-				Add-VersionCandidate -VersionString $ManifestData.Version
-			}
-			if ($ManifestData.PreRelease) {
-				Add-VersionCandidate -VersionString $ManifestData.PreRelease
-			}
-			$psData = $null
-			$privatePreReleaseValue = $null
-			try {
-				$check = $ManifestData.PrivateData['PSData'] -and $ManifestData.PrivateData -is [hashtable]
-			}
-			catch {
-				$check = $null
-			}
-			if ($check) {
-				if ($ManifestData.PrivateData['PSData'].PreRelease) {
-					$privatePreReleaseValue = $ManifestData.PrivateData['PSData'].PreRelease
-				}
-				if ($ManifestData.PrivateData['PSData'].Version) {
-					Add-VersionCandidate -VersionString $ManifestData.PrivateData['PSData'].Version
-				}
-				elseif ($ManifestData.PrivateData['PSData'].ModuleVersion) {
-					Add-VersionCandidate -VersionString $ManifestData.PrivateData['PSData'].ModuleVersion
-				}
-			}
-			if ($candidateVersions.Count -eq 0) {
-				New-Log "No valid version information found in the manifest data for $moduleName" -Level VERBOSE
-				return $null
-			}
-			$highestVersionCandidate = $candidateVersions | Sort-Object -Property VersionObject -Descending | Select-Object -First 1
-			$isPreRelease = $false
-			$preReleaseLabel = $null
-			$highestVersionString = $highestVersionCandidate.VersionString
-			if ($null -ne $privatePreReleaseValue) {
-				if ($privatePreReleaseValue -is [string] -and -not [string]::IsNullOrWhiteSpace($privatePreReleaseValue)) {
-					$preReleaseLabel = $privatePreReleaseValue
-					$isPreRelease = $true
-				}
-				else {
-					$isPreRelease = $false
-					$preReleaseLabel = $null
-				}
-			}
-			else {
-				Write-Verbose "No explicit PSData.Prerelease key found. Checking version string '$highestVersionString' for prerelease tag."
-				if ($highestVersionString -match '^(\d+(?:\.\d+){2,3})-(.+)$') {
-					$prereleasePart = $Matches[2]
-					$isPreRelease = $true
-					$preReleaseLabel = $prereleasePart
-					Write-Verbose "Prerelease status set to TRUE based on version string suffix: '$preReleaseLabel'"
-				}
-				else {
-					Write-Verbose "No prerelease tag found in version string."
-				}
-			}
-			try {
-				$moduleNameRootModule = $null
-				$moduleNameRootModule = ($ManifestData.RootModule -split '\\')[-1]
-				$moduleNameRootModuleString = ($ManifestData.RootModule -split '\.')[-1]
-				if ($moduleNameRootModule -match '\.([a-zA-Z0-9]{3,4})$') {
-					$moduleNameRootModule = [System.IO.Path]::GetFileNameWithoutExtension($moduleNameRootModule)
-				}
-			}
-			catch {
-				$moduleNameRootModule = $null
-			}
-			if (!$resData.ModuleBase -or !$resData.Name) {
-				$module = $null
-				try {
-					$module = Get-Module -Name $moduleNameRootModule -All -ListAvailable -ErrorAction Stop | Where-Object { "$($_.Version)" -eq $ManifestData.ModuleVersion -and $ModuleFilePath.StartsWith($_.ModuleBase) } | Sort-Object -Property Version -Descending -Unique
-				}
-				catch {
-					$module = $null
-				}
-				if (Test-Path -Path $module.Path -ErrorAction SilentlyContinue) {
-					$moduleBase = $module.ModuleBase
-					$moduleName = $module.Name
-				}
-				else {
-					try {
-						$module = Get-Module -Name $moduleNameRootModuleString -All -ListAvailable -ErrorAction Stop | Where-Object { "$($_.Version)" -eq $ManifestData.ModuleVersion -and $ModuleFilePath.StartsWith($_.ModuleBase) } | Sort-Object -Property Version -Descending -Unique
-					}
-					catch {
-						$module = $null
-					}
-					if (Test-Path -Path $module.Path -ErrorAction SilentlyContinue) {
-						$moduleBase = $module.ModuleBase
-						$moduleName = $module.Name
-					}
-				}
-			}
-			return [PSCustomObject]@{
-				ModuleName           = if ($resData.Name) {	$resData.Name } elseif ( $moduleName ) { $moduleName } else { $null }
-				HighestVersion       = $highestVersionCandidate.VersionObject
-				HighestVersionString = $highestVersionString
-				IsPreRelease         = $isPreRelease
-				PreReleaseLabel      = $preReleaseLabel
-				BasePath             = if ($resData.ModuleBase) { $resData.ModuleBase } elseif ( $moduleBase ) { $moduleBase } else { $null }
-			}
+	# --- Define Helper Functions as Strings to Pass to Parallel Scope ---
+	$helperFunctionDefinitions = @{
+		"New-Log"                 = ${function:New-Log}.ToString()
+		"Parse-ModuleVersion"     = ${function:Parse-ModuleVersion}.ToString()
+		"Get-ManifestVersionInfo" = ${function:Get-ManifestVersionInfo}.ToString()
+		"Resolve-ModuleVersion"   = ${function:Resolve-ModuleVersion}.ToString()
+		"Get-ModuleformPath"      = ${function:Get-ModuleformPath}.ToString()
+		"Get-ModuleInfoFromXml"   = ${function:Get-ModuleInfoFromXml}.ToString()
+		"Test-IsResourceFile"     = ${function:Test-IsResourceFile}.ToString()
+	}
+	foreach ($funcName in $helperFunctionDefinitions.Keys) {
+		if ([string]::IsNullOrWhiteSpace($helperFunctionDefinitions[$funcName])) {
+			Write-Error "Helper function '$funcName' could not be found. It must be loaded."
+			return
 		}
 	}
-	function Test-IsResourceFile {
-		param([string]$Path)
-		if ($Path -match '\\([a-z]{2}-[A-Z]{2})\\') {
-			return $true # Check for culture/language code directory pattern (like 'en-US', 'fr-FR', etc.)
+	New-Log "Phase 1: Gathering all .psd1 and PSGetModuleInfo.xml file paths..." -Level INFO
+	$fileDiscoveryStartTime = Get-Date
+	$allPotentialFiles = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+	foreach ($dir in $paths) {
+		try {
+			$psd1Files = Get-ChildItem -Path $dir -Recurse -Filter "*.psd1" -File -ErrorAction SilentlyContinue
+			$xmlFiles = Get-ChildItem -Path $dir -Recurse -Filter "PSGetModuleInfo.xml" -File -ErrorAction SilentlyContinue
+			if ($psd1Files -is [array]) {
+				foreach ($file in $psd1Files) {
+					$allPotentialFiles.Add($file)
+				}
+			}
+			if ($xmlFiles -is [array]) {
+				foreach ($file in $xmlFiles) {
+					$allPotentialFiles.Add($file)
+				}
+			}
 		}
-		if ($Path -match '\\(Resources|Localization|Localizations|Languages|Cultures)\\') {
-			return $true # Check if in any directory that might contain UI culture resources
+		catch {
+			Write-Host "Error processing directory $($dir.FullName): $_" -ForegroundColor Red
 		}
-		if ($Path -match '(Resources|Strings|Localized|Messages|Text|Errors|Labels)\.(psd1|xml)$') {
-			return $true # Check for common resource file naming patterns
-		}
-		if ($Path -match '\\([a-z]{2})\\[^\\]+\.(psd1|xml)$') {
-			return $true # Check for alternative culture code format (like 'en', 'fr', etc.)
-		}
-		return $false
 	}
-	$allFoundModules = [System.Collections.Generic.List[object]]::new()
-	$processedManifests = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-	$processedModuleRoots = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-	foreach ($startPath in $Paths) {
-		if (-not (Test-Path $startPath -PathType Container)) {
-			New-Log "Input path '$startPath' is not a valid directory. Skipping." -Level WARNING
-			continue
-		}
-		$potentialModuleDirs = Get-ChildItem -Path $startPath -Directory -ErrorAction SilentlyContinue | Where-Object {
-			$_.Name -notmatch '^\.|^__'
-		}
-		if (-not $potentialModuleDirs) {
-			New-Log "No potential module directories found directly under '$startPath'." -Level VERBOSE
-			continue
-		}
-		foreach ($moduleDir in $potentialModuleDirs) {
-			$moduleRootPath = $moduleDir.FullName
-			$moduleRootNameGuess = $moduleDir.Name
-			if (-not $processedModuleRoots.Add($moduleRootPath)) {
-				continue
+	$fileDiscoveryDuration = (Get-Date) - $fileDiscoveryStartTime
+	New-Log "Phase 1 complete. Found $($allPotentialFiles.Count) potential module files in $($fileDiscoveryDuration.ToString("g"))." -Level INFO
+	if ($allPotentialFiles.Count -eq 0) {
+		New-Log "No potential module files found to process." -Level WARNING
+		return [ordered]@{}
+	}
+	# --- PHASE 2: Process individual files in parallel ---
+	New-Log "Phase 2: Starting parallel processing of $($allPotentialFiles.Count) files (Throttle: $ThrottleLimit)..." -Level INFO
+	$parallelProcessingStartTime = Get-Date
+	$allFoundModulesFromParallel = [System.Collections.Concurrent.ConcurrentBag[object]]::new()
+	$sortedModules = [ordered]@{}
+	$sortedModules = $allPotentialFiles | ForEach-Object -ThrottleLimit $ThrottleLimit -Parallel {
+		# --- BEGIN PARALLEL SCRIPT BLOCK ---
+		$fileInfo = $_ # Current System.IO.FileInfo object
+		$filePath = $fileInfo.FullName
+		$fileExtension = $fileInfo.Extension # .psd1 or .xml
+		Import-Module -Name 'Microsoft.PowerShell.PSResourceGet' -Global -Force
+		# $currentKernelTime = (Get-Process -Id $pid).KernelTime # Example, can be removed if not used
+		$VerbosePreference = $using:VerbosePreference
+		$allFoundModulesFromParallel = $using:allFoundModulesFromParallel
+		# --- Restore Helper Functions ---
+		# Bring the whole hashtable into the parallel scope
+		$localHelperFunctionDefinitions = $using:helperFunctionDefinitions
+		foreach ($funcName in $localHelperFunctionDefinitions.Keys) {
+			# Ensure the definition string is not null or empty before invoking
+			$funcDefinition = $localHelperFunctionDefinitions[$funcName]
+			if (-not [string]::IsNullOrWhiteSpace($funcDefinition)) {
+				Invoke-Expression -Command "function global:$funcName { $funcDefinition }"
 			}
-			$psd1Files = Get-ChildItem -Path $moduleRootPath -Recurse -Filter *.psd1 -File -ErrorAction SilentlyContinue
-			$xmlFiles = Get-ChildItem -Path $moduleRootPath -Recurse -Filter PSGetModuleInfo.xml -File -ErrorAction SilentlyContinue
-			foreach ($file in $psd1Files) {
-				$filePath = $file.FullName
-				if (-not $processedManifests.Add($filePath)) {
-					continue
-				}
-				if (Test-IsResourceFile -Path $filePath) {
-					continue
-				}
+		}
+		if (Test-IsResourceFile -Path $filePath) {
+			New-Log "Skipping likely resource file in parallel: $filePath" -Level VERBOSE
+			return
+		}
+		if ($fileExtension -eq '.psd1') {
+			$manifestInfoObj = $null
+			$testManifestOutput = $null
+			try {
+				$testManifestOutput = Test-ModuleManifest -Path $filePath -ErrorAction Stop -WarningAction SilentlyContinue -Verbose:$false
+			}
+			catch {
+				$testManifestOutput = $null
+				New-Log "Test-ModuleManifest crashed while using path $filePath" -Level VERBOSE
+			}
+			if ($testManifestOutput) {
 				try {
-					$manifestInfo, $manifestInfo1, $manifestInfo2, $res1, $res2 = $null
-					try {
-						$res1 = Test-ModuleManifest -Path $filePath -ErrorAction Stop -WarningAction SilentlyContinue
-					}
-					catch {
-						$res1 = $null
-					}
-					if ($res1) {
-						$manifestInfo = Get-ManifestVersionInfo -ManifestData $res1 -Quick -ErrorAction Stop -WarningAction SilentlyContinue # Use SilentlyContinue as it might be invalid/resource
-						if ($manifestInfo) {
-							$manifestInfo1 = [psCustomObject]@{
-								ModuleName           = $manifestInfo.ModuleName
-								ModuleVersion        = $manifestInfo.HighestVersion
-								HighestVersionString = $manifestInfo.HighestVersionString
-								isPreRelease         = $manifestInfo.IsPreRelease
-								PreReleaseLabel      = $manifestInfo.PreReleaseLabel
-								BasePath             = if ($manifestInfo.BasePath.EndsWith($manifestInfo.ModuleName)) { "$($manifestInfo.BasePath)" } elseif ($manifestInfo.BasePath.EndsWith("Modules")) { "$(Join-Path ($manifestInfo.BasePath) ($manifestInfo.ModuleName) -Erroraction SilentlyContinue)" } else { "$(Split-Path $manifestInfo.BasePath -Parent -ErrorAction SilentlyContinue)" }
-								Author               = if ($res1.Author) { $res1.Author } else { $null }
-							}
-						}
-					}
+					$manifestInfoObj = $testManifestOutput | Get-ManifestVersionInfo -Quick -ErrorAction Stop -WarningAction SilentlyContinue
 				}
 				catch {
-					New-Log "Test-ModuleManifest failed for '$filePath'.. Will try other methods." -Level ERROR
-				}
-				try {
-					$res2 = Import-PowerShellDataFile -Path $filePath -ErrorAction Stop -WarningAction SilentlyContinue
-				}
-				catch {
-					$res2 = $null
-				}
-				if ($res1 -and $res2 ) {
-					try {
-						$manifestInfo = Get-ManifestVersionInfo -ManifestData $res2 -ResData $res1 -ModuleFilePath $filePath -ErrorAction Stop -WarningAction SilentlyContinue
-						$manifestInfo = $manifestInfo | Where-Object { $_ -ne $null }
-						$manifestInfo2 = [psCustomObject]@{
-							ModuleName           = $manifestInfo.ModuleName
-							ModuleVersion        = $manifestInfo.HighestVersion
-							HighestVersionString = $manifestInfo.HighestVersionString
-							isPreRelease         = $manifestInfo.IsPreRelease
-							PreReleaseLabel      = $manifestInfo.PreReleaseLabel
-							BasePath             = if ($manifestInfo.BasePath.EndsWith($manifestInfo.ModuleName)) { $($manifestInfo.BasePath) } elseif ($manifestInfo.BasePath.EndsWith("Modules")) { "$(Join-Path ($manifestInfo.BasePath) ($manifestInfo.ModuleName) -Erroraction SilentlyContinue)" } else { "$(Split-Path $manifestInfo.BasePath -Parent -ErrorAction SilentlyContinue)" }
-							Author               = if ($res2.Author) { $res2.Author } else { $null }
-						}
-					}
-					catch {
-						New-Log "Failed to get manifest." -Level ERROR
-					}
-				}
-				elseif ($res2) {
-					try {
-						$manifestInfo = Get-ManifestVersionInfo -ManifestData $res2 -ModuleFilePath $filePath -ErrorAction Stop -WarningAction SilentlyContinue
-						$manifestInfo = $manifestInfo | Where-Object { $_ -ne $null }
-						if ($manifestInfo) {
-							$manifestInfo2 = [psCustomObject]@{
-								ModuleName           = $manifestInfo.ModuleName
-								ModuleVersion        = $manifestInfo.HighestVersion
-								HighestVersionString = $manifestInfo.HighestVersionString
-								isPreRelease         = $manifestInfo.IsPreRelease
-								PreReleaseLabel      = $manifestInfo.PreReleaseLabel
-								BasePath             = if ($manifestInfo.BasePath.EndsWith($manifestInfo.ModuleName)) { "$($manifestInfo.BasePath)" } elseif ($manifestInfo.BasePath.EndsWith("Modules")) { "$(Join-Path ($manifestInfo.BasePath) ($manifestInfo.ModuleName) -Erroraction SilentlyContinue)" } else { "$(Split-Path $manifestInfo.BasePath -Parent -ErrorAction SilentlyContinue)" }
-								Author               = if ($res2.Author) { $res2.Author } else { $null }
-							}
-						}
-					}
-					catch { }
-				}
-				$manifestInfo = @()
-				if ($manifestInfo1) {
-					$manifestInfo += $manifestInfo1
-					Write-Verbose "Added manifestInfo1 to merged array."
-				}
-				if (![string]::IsNullOrEmpty($manifestInfo2.ModuleName) -and ($manifestInfo2.BasePath -ne $manifestInfo1.BasePath -or $manifestInfo2.ModuleName -ne $manifestInfo1.ModuleName -or $manifestInfo2.HighestVersionString -ne $manifestInfo1.HighestVersionString)) {
-					$manifestInfo += $manifestInfo2
-					Write-Verbose "Added manifestInfo2 to merged array."
-				}
-				foreach ($mInfo in $manifestInfo) {
-					if ($mInfo -and $mInfo.ModuleVersion -and $mInfo.ModuleName) {
-						$allFoundModules.Add([PSCustomObject]@{
-								ModuleName           = $mInfo.ModuleName
-								ModuleVersion        = $mInfo.ModuleVersion # Store as [version] object
-								HighestVersionString = $mInfo.HighestVersionString
-								BasePath             = if ($mInfo.BasePath) { $minfo.BasePath }  else { $null }
-								isPreRelease         = $mInfo.isPreRelease
-								PreReleaseLabel      = $mInfo.PreReleaseLabel
-								Author               = if ($mInfo.Author) { $mInfo.Author } else { $null }
-							})
-					}
-					else {
-						New-Log "mInfo doesnt contain all required parameters: $mInfo" -Level DEBUG
-					}
+					$manifestInfoObj = $null
+					New-Log "Get-ManifestVersionInfo crashed." -Level VERBOSE
 				}
 			}
-			foreach ($xmlFile in $xmlFiles) {
-				$filePath = $xmlFile.FullName
-				if (-not $processedManifests.Add($filePath)) {
-					continue
+			if (-not $manifestInfoObj) {
+				try {
+					$manifestInfoObj = Get-ManifestVersionInfo -ModuleFilePath $filePath -ErrorAction Stop -WarningAction SilentlyContinue
 				}
-				$xmlInfo = Get-ModuleInfoFromXml -XmlFilePath $filePath -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
-				$pathInfo = Get-ModuleformPath -Path $xmlFile.DirectoryName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
-				if ($xmlInfo -and $xmlInfo.ModuleName -and $xmlInfo.ModuleVersion -and ($xmlInfo.BasePath -or $pathInfo.BasePath)) {
-					$allFoundModules.Add([PSCustomObject]@{
-							ModuleName      = $xmlInfo.ModuleName
-							ModuleVersion   = $xmlInfo.ModuleVersion
-							BasePath        = if ($xmlInfo.BasePath) { $xmlInfo.BasePath } elseif ($pathInfo.BasePath) { $pathInfo.BasePath } else { $null }
-							isPreRelease    = $xmlInfo.isPreRelease
-							PreReleaseLabel = $xmlInfo.PreReleaseLabel
-							Author          = if ($xmlInfo.Author) { $xmlInfo.Author } else { $null }
+				catch {
+					$manifestInfoObj = $null
+					New-Log "Get-ManifestVersionInfo while using path $filePath" -Level VERBOSE
+				}
+			}
+			$manifestInfosToProcess = @()
+			if ($manifestInfoObj) {
+				if ($manifestInfoObj -is [array] -or $manifestInfoObj -is [System.Collections.IList]) {
+					$manifestInfosToProcess = $manifestInfoObj
+				}
+				else {
+					$manifestInfosToProcess = @($manifestInfoObj)
+				}
+			}
+			foreach ($mInfo in $manifestInfosToProcess) {
+				if ($mInfo -and $mInfo.ModuleVersion -and $mInfo.ModuleName) {
+					$allFoundModulesFromParallel.Add([PSCustomObject]@{
+							ModuleName          = $mInfo.ModuleName
+							ModuleVersion       = $mInfo.ModuleVersion
+							ModuleVersionString = $mInfo.ModuleVersionString
+							BasePath            = $mInfo.BasePath
+							isPreRelease        = $mInfo.isPreRelease
+							PreReleaseLabel     = $mInfo.PreReleaseLabel
+							Author              = $mInfo.Author
 						})
 				}
 				else {
-					New-Log "xmlInfo doesnt contain all required parameters: $xmlInfo and $pathInfo" -Level DEBUG
+					New-Log "psd1 info from '$mInfo' missing required parameters (ModuleName/ModuleVersion)." -Level VERBOSE
 				}
 			}
 		}
+		elseif ($fileExtension -eq '.xml') {
+			$xmlInfo = Get-ModuleInfoFromXml -XmlFilePath $filePath -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+			if ($xmlInfo -and $xmlInfo.ModuleName -and $xmlInfo.ModuleVersion) {
+				$allFoundModulesFromParallel.Add([PSCustomObject]@{
+						ModuleName          = $xmlInfo.ModuleName
+						ModuleVersion       = $xmlInfo.ModuleVersion
+						ModuleVersionString = $xmlInfo.ModuleVersionString
+						BasePath            = $xmlInfo.BasePath
+						isPreRelease        = $xmlInfo.isPreRelease
+						PreReleaseLabel     = $xmlInfo.PreReleaseLabel
+						Author              = $xmlInfo.Author
+					})
+			}
+			else {
+				New-Log "xml info from '$xmlInfo' missing required parameters (ModuleName/ModuleVersion)." -Level VERBOSE
+			}
+		}
+		# --- END PARALLEL SCRIPT BLOCK ---
+	} # End ForEach-Object -Parallel
+	$parallelProcessingDuration = (Get-Date) - $parallelProcessingStartTime
+	New-Log "Phase 2 complete. Parallel processing took $($parallelProcessingDuration.ToString("g")). Collected $($allFoundModulesFromParallel.Count) raw entries." -Level INFO
+	# --- PHASE 3: Post-processing and Aggregation ---
+	New-Log "Phase 3: Starting post-processing and aggregation..." -Level INFO
+	$aggregationStartTime = Get-Date
+	$allFoundModulesArray = $allFoundModulesFromParallel.ToArray()
+	if ($allFoundModulesArray.Count -eq 0) {
+		New-Log "No valid module data collected after parallel processing." -Level WARNING
+		return [ordered]@{}
 	}
-	$uniqueModules = $allFoundModules | Group-Object -Property ModuleName, ModuleVersion, BasePath | ForEach-Object { $_.Group[0] }
-	$allFoundModules = [System.Collections.Generic.List[object]]::new($uniqueModules)
-	$resultModules = @{}
-	if ($allFoundModules.Count -eq 0) {
-		New-Log "No module files found in the specified paths." -Level WARNING
-		return $resultModules
-	}
+	# Deduplicate, Normalize, Group (This part remains the same as your latest version)
+	$uniqueModules = $allFoundModulesArray | Group-Object -Property ModuleName, BasePath, ModuleVersionString | ForEach-Object { $_.Group[0] }
+	New-Log "Reduced to $($uniqueModules.Count) unique entries after initial grouping." -Level DEBUG
 	$resultModules = [ordered]@{}
-	$modulesGroupedByName = $allFoundModules | Where-Object { $null -ne $_.ModuleName } | Group-Object ModuleName
+	$modulesGroupedByName = $uniqueModules | Where-Object { $null -ne $_.ModuleName -and $_.ModuleName -notmatch '^\d+(\.\d+)+$' } | Group-Object ModuleName
 	foreach ($nameGroup in $modulesGroupedByName) {
 		$moduleName = $nameGroup.Name
-		Write-Verbose "Processing ModuleName: $moduleName"
+		# New-Log "Post-processing ModuleName: $moduleName" -Level VERBOSE
 		$groupWithNormalizedPaths = $nameGroup.Group | Where-Object { $null -ne $_ } | ForEach-Object {
 			$newObject = $_ | Select-Object *
 			if ($null -ne $newObject.BasePath -and -not ([string]::IsNullOrWhiteSpace($moduleName))) {
@@ -959,7 +552,18 @@ function Get-ModuleInfo {
 				$normalizedCurrentPath = $currentBasePath.TrimEnd('\', '/') -replace '/', '\'
 				$expectedEnding = "\$moduleName"
 				if (-not $normalizedCurrentPath.EndsWith($expectedEnding, [System.StringComparison]::OrdinalIgnoreCase)) {
-					$newObject.BasePath = Join-Path -Path $normalizedCurrentPath -ChildPath $moduleName
+					$leafName = Split-Path $normalizedCurrentPath -Leaf
+					$parentOfCurrent = Split-Path $normalizedCurrentPath -Parent -ErrorAction SilentlyContinue
+					$parentLeafName = if ($parentOfCurrent) { Split-Path $parentOfCurrent -Leaf -ErrorAction SilentlyContinue } else { $null }
+					if ($parentLeafName -eq $moduleName -and $leafName -match '^\d+(\.\d+){1,3}(-.+)?$') {
+						$newObject.BasePath = $parentOfCurrent
+					}
+					elseif ($leafName -eq 'Modules' -or $leafName -eq 'Documents') {
+						$newObject.BasePath = Join-Path -Path $normalizedCurrentPath -ChildPath $moduleName -ErrorAction SilentlyContinue
+					}
+					else {
+						$newObject.BasePath = $normalizedCurrentPath
+					}
 				}
 				else {
 					$newObject.BasePath = $normalizedCurrentPath
@@ -971,679 +575,905 @@ function Get-ModuleInfo {
 		$finalModuleLocations = [System.Collections.Generic.List[object]]::new()
 		foreach ($basePathGroup in $modulesGroupedByBasePath) {
 			$currentBasePath = $basePathGroup.Name
-			Write-Verbose " Processing Grouped BasePath: $currentBasePath (Count: $($basePathGroup.Count))"
-			$versionsInPathGroup = $basePathGroup.Group | Group-Object -Property ModuleVersion
+			$versionsInPathGroup = $basePathGroup.Group | Group-Object -Property @{ Expression = { if ($_.ModuleVersion -is [version]) { $_.ModuleVersion } else { $_.ModuleVersionString } } }
 			foreach ($versionGroup in $versionsInPathGroup) {
-				$representativeEntry = $versionGroup.Group | Select-Object -First 1
+				$representativeEntry = $versionGroup.Group | Sort-Object -Property @{Expression = { $_.ModuleVersion -is [version] }; Descending = $true }, ModuleVersionString | Select-Object -First 1
 				if ($representativeEntry) {
 					$outputObject = [PSCustomObject]@{
+						ModuleName          = $moduleName
 						ModuleVersion       = $representativeEntry.ModuleVersion
-						ModuleVersionString = $representativeEntry.ModuleVersion.ToString()
+						ModuleVersionString = $representativeEntry.ModuleVersionString
 						BasePath            = $currentBasePath
 						IsPreRelease        = $representativeEntry.IsPreRelease
 						PreReleaseLabel     = $representativeEntry.PreReleaseLabel
 						Author              = $representativeEntry.Author
 					}
 					$finalModuleLocations.Add($outputObject)
-					Write-Verbose "  Added unique Version: $($outputObject.ModuleVersionString) for BasePath: $currentBasePath"
-				}
-				else {
-					New-Log "Not a representative entry: $currentBasePath" -Level WARNING
 				}
 			}
 		}
 		if ($finalModuleLocations.Count -gt 0) {
-			$sortedLocations = $finalModuleLocations | Sort-Object BasePath, ModuleVersion
+			$sortedLocations = $finalModuleLocations | Sort-Object BasePath, @{Expression = { $_.ModuleVersion }; Ascending = $true }
 			$resultModules[$moduleName] = $sortedLocations
-			New-Log "Finished processing $moduleName. Found $($finalModuleLocations.Count) unique BasePath/Version combinations." -Level DEBUG
-		}
-		else {
-			$finalModuleLocations
-			New-Log "FinalModuleLocations count was 0 on module: $moduleName" -Level WARNING
 		}
 	}
-	$sortedModules = [ordered]@{}
+	$finalSortedModules = [ordered]@{}
 	foreach ($key in ($resultModules.Keys | Sort-Object)) {
-		if ($key -in $IgnoredModules) {
-			New-Log "Skipping $key since it's on the ignorelist." -Level WARNING
-			continue
-		}
-		if ($key -notmatch '^\d+(\.\d+)+$') {
-			$sortedModules[$key] = $resultModules[$key]
+		if ($IgnoredModules -notcontains $key) {
+			# $using: not needed, main thread
+			$finalSortedModules[$key] = $resultModules[$key]
 		}
 		else {
-			New-Log "Skipping potential module entry with an invalid name (looks like a version): $key" -Level WARNING
+			New-Log "Skipping module '$key' as it is in the IgnoredModules list (final filter)." -Level VERBOSE
 		}
 	}
-	Return $sortedModules
+	$aggregationDuration = (Get-Date) - $aggregationStartTime
+	New-Log "Phase 3 (Aggregation) complete in $($aggregationDuration.ToString("g"))." -Level INFO
+	$totalFunctionDuration = (Get-Date) - $fileDiscoveryStartTime # Start from very beginning of Phase 1
+	New-Log "Get-ModuleInfo completed. Total duration: $($totalFunctionDuration.ToString("g")). Found $($finalSortedModules.Keys.Count) modules." -Level SUCCESS
+	Return $finalSortedModules
 }
-function Get-ModuleformPath {
-	[CmdletBinding()]
-	param (
-		[Parameter(Mandatory = $true)][string]$Path
-	)
-	$normalizedPath = $Path -replace '/', '\'
-	if ($normalizedPath -match '\\Modules\\([^\\]+)(?:\\|$)') {
-		$moduleName = $Matches[1]
-		$searchPattern = '^(.*\\Modules\\' + [regex]::Escape($moduleName) + ')(?:\\.*)?$'
-		$modulePath = $normalizedPath -replace $searchPattern, '$1'
-		return [PSCustomObject]@{
-			ModuleName = $moduleName
-			ModulePath = $modulePath
-		}
-	}
-	$leaf = Split-Path -Path $normalizedPath -Leaf
-	$parent = Split-Path -Path $normalizedPath -Parent
-	if ($leaf -eq 'Modules' -and $parent) {
-		$parentLeaf = Split-Path -Path $parent -Leaf
-		$parentParent = Split-Path -Path $parent -Parent
-		if ($parentLeaf -and $parentParent) {
-			return [PSCustomObject]@{
-				ModuleName = $parentLeaf
-				ModulePath = $parent
-			}
-		}
-	}
-	elseif ($leaf -and $parent) {
-		return [PSCustomObject]@{
-			ModuleName = $leaf
-			ModulePath = $parent
-		}
-	}
-	else {
-		return [PSCustomObject]@{
-			ModuleName = $normalizedPath
-			ModulePath = $null
-		}
-	}
-}
-function Get-ModuleInfoFromXml {
-	[CmdletBinding()]
-	param (
-		[Parameter(Mandatory = $true)][string]$XmlFilePath
-	)
-	if (-not (Test-Path -Path $XmlFilePath -PathType Leaf)) {
-		New-Log "XML file not found: $XmlFilePath" -Level WARNING
-		return $null
-	}
-	try {
-		[xml]$xmlContent = Get-Content -Path $XmlFilePath -Raw
-		$nsManager = New-Object System.Xml.XmlNamespaceManager($xmlContent.NameTable)
-		$nsManager.AddNamespace("ps", "http://schemas.microsoft.com/powershell/2004/04")
-		$nameNode = ($xmlContent.SelectSingleNode("//ps:S[@N='Name']", $nsManager)).'#text'
-		$authorNode = ($xmlContent.SelectSingleNode("//ps:S[@N='Author']", $nsManager)).'#text'
-		$versionNode = ($xmlContent.SelectSingleNode("//ps:S[@N='Version']", $nsManager)).'#text'
-		$locationNode = ($xmlContent.SelectSingleNode("//ps:S[@N='InstalledLocation']", $nsManager)).'#text'
-		$prerelease = ($xmlContent.SelectSingleNode("//ps:B[@N='IsPrerelease']", $nsManager)).'#text'
-		$prerelease2 = ($xmlContent.SelectSingleNode("//ps:S[@N='IsPrerelease']", $nsManager)).'#text'
-		$normalizedVersion = ($xmlContent.SelectSingleNode("//ps:S[@N='NormalizedVersion']", $nsManager)).'#text'
-		[bool]$IsPrerelease = $false
-		if ($prerelease -ieq 'true' -or $prerelease2 -ieq 'true') {
-			$IsPrerelease = $true
-		}
-		if ($nameNode -and $versionNode) {
-			$result = [PSCustomObject]@{
-				ModuleName      = $nameNode
-				ModuleVersion   = $versionNode
-				BasePath        = if ($locationNode) { "$(Join-Path -Path $locationNode -ChildPath $nameNode)" } else { $null }
-				isPreRelease    = $IsPrerelease
-				PreReleaseLabel = if ($IsPrerelease -and $normalizedVersion) { $normalizedVersion } elseif ($IsPrerelease -and $versionNode) { $versionNode } else { $null }
-				Author          = if ($authorNode) { $authorNode } else { $null }
-			}
-			return $result
-		}
-		else {
-			New-Log "Could not find Name or Version node in XML: $XmlFilePath" -Level VERBOSE
-			return $null
-		}
-	}
-	catch {
-		New-Log "Error parsing XML file '$XmlFilePath': $($_.Exception.Message)" -Level WARNING
-		return $null
-	}
-}
+#endregion Get-ModuleInfo
+#region Get-ModuleUpdateStatus
 function Get-ModuleUpdateStatus {
+	<#
+	.SYNOPSIS
+	Checks online repositories for updates to locally installed modules based on provided inventory data, using parallel processing for efficiency.
+	.DESCRIPTION
+	This function determines if updates are available for modules listed in a local inventory. It operates in two main stages:
+	1.  *Stage 1: Online Version Pre-fetching:**
+	For each unique module name derived from the input `-ModuleInventory`:
+	a. Applies blacklist rules: If a module is blacklisted for all repositories (entry like `ModuleName = '*'`) or for all specified repositories, it's skipped.
+	b. For non-blacklisted modules, it launches a parallel thread job (`Start-ThreadJob`) using a script block that calls `Find-Module` against the specified `-Repositories`. This is done twice for each module: once to find the latest stable version and once (with `-AllowPrerelease`) to find the latest pre-release version.
+	c. The results (latest stable and latest pre-release found online, or any errors) are collected from these jobs and stored in a thread-safe cache. This stage includes timeout handling for each `Find-Module` job.
+	2.  *Stage 2: Parallel Comparison:**
+	For each module from the prepared local inventory:
+	a. It retrieves the pre-fetched online version data (stable and pre-release) from the cache.
+	b. It determines the single "latest" available online version by comparing the pre-fetched stable and pre-release versions using the `Compare-ModuleVersion` helper function (which generally prefers a pre-release if its base version is the same as or newer than the stable version).
+	c. This "latest" online version is then compared against the highest locally installed version of the module (also determined using `Compare-ModuleVersion`).
+	d. If an update is indicated (`LatestOnlineVersion` > `HighestLocalVersion`) and the `-MatchAuthor` switch is specified, it further checks if the author of the online module matches the author of the local module. An update is only reported if authors match or if `-MatchAuthor` is not used.
+	e. If an update is confirmed, it identifies which specific local installation paths of the module do not yet have this latest online version.
+	f. Information about modules needing updates is collected into a thread-safe bag.
+	Progress is logged throughout the process. The function returns an array of PSCustomObjects, each detailing a module for which an update is available.
+	.PARAMETER ModuleInventory
+	[Mandatory] A hashtable, typically the output of `Get-ModuleInfo`.
+	The keys are module names [string].
+	Each value is an array of PSCustomObjects, where each object represents an installed instance of that module and must contain at least:
+	- ModuleVersion ([System.Version] or a string parsable to a version)
+	- ModuleVersionString ([string])
+	- BasePath ([string])
+	- IsPrerelease ([bool], optional)
+	- PreReleaseLabel ([string], optional)
+	- Author ([string], optional)
+	.PARAMETER Repositories
+	An array of strings specifying the names of the registered PSResource repositories to check for updates. Defaults to `@('PSGallery', 'NuGet')`. Ensure these repositories are registered and accessible.
+	.PARAMETER ThrottleLimit
+	The maximum number of parallel jobs to run simultaneously. This applies to both the pre-fetching stage (`Start-ThreadJob`'s internal throttle) and the comparison stage (`ForEach-Object -Parallel`). Defaults to `([System.Environment]::ProcessorCount * 2)`.
+	.PARAMETER TimeoutSeconds
+	The maximum time in seconds that each individual `Find-Module` job in the pre-fetching stage is allowed to run before being timed out. Defaults to 30 seconds.
+	.PARAMETER BlackList
+	A hashtable used to exclude specific modules from update checks or to exclude them from being checked against certain repositories.
+	- To completely exclude a module: `@{ 'ModuleName' = '*' }`
+	- To exclude a module from specific repositories: `@{ 'ModuleName' = @('Repo1', 'Repo2') }` or `@{ 'ModuleName' = 'Repo1' }`
+	Defaults to an empty hashtable (no blacklisting).
+	.PARAMETER MatchAuthor
+	If specified, an update for a module will only be reported if the author of the latest online version matches the author of the locally installed version. Author matching is case-insensitive and ignores non-alphanumeric characters.
+	.INPUTS
+	None. This function does not accept direct pipeline input for its main parameters but relies on the `-ModuleInventory` parameter.
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject[]
+	An array of PSCustomObjects, where each object represents a module that has an available update. Each object includes:
+	- ModuleName ([string]): The name of the module.
+	- Repository ([string]): The name of the repository where the latest version was found.
+	- IsPreview ([bool]): True if the latest available online version is a pre-release.
+	- PreReleaseVersion ([string]): The pre-release tag of the latest online version (e.g., "beta1"), if applicable.
+	- HighestLocalVersion ([System.Version]): The [System.Version] object of the highest version currently installed locally.
+	- LatestVersion ([System.Version]): The [System.Version] object of the latest version available online.
+	- LatestVersionString ([string]): The full string representation of the latest online version (e.g., "2.1.0" or "2.1.0-beta1").
+	- OutdatedModules ([PSCustomObject[]]): An array of objects, each detailing a local installation path that is outdated. Each sub-object has:
+	- Path ([string]): The base path of the outdated local installation.
+	- InstalledVersion ([string]): The version string of the outdated local installation at that path.
+	- Author ([string]): Author of the local module.
+	- GalleryAuthor ([string]): Author of the online module.
+	Returns an empty array if no updates are found or if the input inventory is empty.
+	.EXAMPLE
+	PS C:\> $inventory = Get-ModuleInfo -Paths $env:PSModulePath
+	PS C:\> $updates = Get-ModuleUpdateStatus -ModuleInventory $inventory -Repositories 'PSGallery' -MatchAuthor -BlackList @{ 'SomeModule' = '*' }
+	Checks PSGallery for updates to modules in `$inventory`, requiring author match, and skipping 'SomeModule'.
+	.NOTES
+	- Requires PowerShell 7.0 or later due to the use of `Start-ThreadJob` and `ForEach-Object -Parallel`.
+	- Relies on `Find-Module` cmdlet (from `PowerShellGet` or `Microsoft.PowerShell.PSResourceGet` module). Ensure one of these is installed and functional.
+	- Depends on internal helper functions `Compare-ModuleVersion` and an external `New-Log` function.
+	- Network connectivity to the specified repositories is required for the online version pre-fetching stage.
+	- The accuracy of update detection depends on the quality of the input `$ModuleInventory`.
+	.LINK
+	Get-ModuleInfo
+	Find-Module
+	Start-ThreadJob
+	ForEach-Object -Parallel
+	Compare-ModuleVersion
+	#>
 	[CmdletBinding()]
 	param (
 		[Parameter(Mandatory)][hashtable]$ModuleInventory,
-		[string[]]$Repositories = @('PSGallery', 'NuGet'),
-		[int]$ThrottleLimit = [Environment]::ProcessorCount * 2,
-		[ValidateRange(1, 300)][int]$TimeoutSeconds = 30,
+		[string[]]$Repositories = @('PSGallery', 'NuGet'), # Ensure 'NuGet' is a valid registered PS Repository name or remove it
+		[int]$ThrottleLimit = ([Environment]::ProcessorCount * 2),
+		[ValidateRange(1, 3600)][int]$TimeoutSeconds = 30, # Increased max timeout range
 		[hashtable]$BlackList = @{},
 		[switch]$MatchAuthor
 	)
+	# Quick environment check
 	if ($PSVersionTable.PSVersion.Major -lt 7) {
 		New-Log "This function requires PowerShell 7 or later. Current version: $($PSVersionTable.PSVersion)" -Level ERROR
 		return
 	}
-	function Parse-ModuleVersion {
-		param (
-			[string]$VersionString
-		)
-		$version = $null
-		$isParseable = [version]::TryParse($VersionString, [ref]$version)
-		if ($isParseable) {
-			return [PSCustomObject]@{
-				ModuleVersionStringNoPrefix = $VersionString
-				ModuleVersionString         = $VersionString
-				ModuleVersion               = [version]$version
-				IsSemVer                    = $false
-				IsPrerelease                = $false
-				PreReleaseLabel             = $null
-			}
-		}
-		if ($VersionString -match '^(\d+(?:\.\d+){2,3})-(.+)$') {
-			[string]$versionPart = $Matches[1]
-			[string]$prereleasePart = $Matches[2]
-			if ([version]::TryParse($versionPart, [ref]$version)) {
-				return [PSCustomObject]@{
-					ModuleVersionStringNoPrefix = $versionPart
-					ModuleVersionString         = [string]$VersionString
-					ModuleVersion               = [version]$version
-					IsSemVer                    = $true
-					IsPrerelease                = $true
-					PreReleaseLabel             = $prereleasePart
-				}
-			}
-		}
-		if ($VersionString -match '^(\d+(?:\.\d+){2,3})') {
-			[string]$versionPart = $Matches[0]
-			if ([version]::TryParse($versionPart, [ref]$version)) {
-				return [PSCustomObject]@{
-					ModuleVersionStringNoPrefix = $VersionString
-					ModuleVersionString         = $VersionString
-					ModuleVersion               = [version]$version
-					IsSemVer                    = $false
-					IsPrerelease                = $false
-					PreReleaseLabel             = $null
-				}
-			}
-		}
-		return $null
-	}
-	function Compare-PrereleaseVersion {
-		[CmdletBinding()]
-		param (
-			[Parameter(Mandatory)][string]$VersionA,
-			[Parameter(Mandatory)][string]$VersionB,
-			[Parameter()][switch]$ReturnBoolean
-		)
-		$typePriority = @{
-			'dev'     = 0
-			'alpha'   = 1
-			'beta'    = 2
-			'preview' = 3
-			'rc'      = 4
-		}
-		if ($VersionA.gettype().Name -ne 'String' -or $VersionA.Count -gt 1) {
-			$VersionA = $VersionA[0].ToString()
-		}
-		if ($VersionB.gettype().Name -ne 'String' -or $VersionB.Count -gt 1) {
-			$VersionB = $VersionB[0].ToString()
-		}
-		$preReleaseA = ($VersionA -split '-', 2)[-1]
-		$preReleaseB = ($VersionB -split '-', 2)[-1]
-		if (-not $preReleaseA -or -not $preReleaseB) {
-			Write-Verbose "Could not extract pre-release identifier from '$VersionA' or '$VersionB'."
-			if ($ReturnBoolean) { return $false } else { return $VersionA }
-		}
-		$preReleaseA = $preReleaseA.ToLower()
-		$preReleaseB = $preReleaseB.ToLower()
-		$regex = "^(dev|alpha|beta|preview|rc)(\d*)$"
-		$matchA = [regex]::Match($preReleaseA, $regex)
-		$matchB = [regex]::Match($preReleaseB, $regex)
-		if (-not $matchA.Success -or -not $matchB.Success) {
-			Write-Verbose "Invalid prerelease format found. Comparing '$preReleaseA' and '$preReleaseB'. Expected format like 'dev','alpha1', 'beta2', 'preview3' or 'rc'."
-			if ($ReturnBoolean) {
-				return $false
-			}
-			else {
-				if ($matchA.Success) { return $VersionA }
-				elseif ($matchB.Success) { return $VersionB }
-				else { return $VersionA }
-			}
-		}
-		$typeA = $matchA.Groups[1].Value
-		$numberA = if ($matchA.Groups[2].Value -eq '') { 0 } else { [int]$matchA.Groups[2].Value }
-		$typeB = $matchB.Groups[1].Value
-		$numberB = if ($matchB.Groups[2].Value -eq '') { 0 } else { [int]$matchB.Groups[2].Value }
-		if ($typeA -ne $typeB) {
-			if ($ReturnBoolean) {
-				return $typePriority[$typeB] -gt $typePriority[$typeA]
-			}
-			else {
-				return $(if ($typePriority[$typeA] -gt $typePriority[$typeB]) { $VersionA } else { $VersionB })
-			}
-		}
-		if ($ReturnBoolean) {
-			return $numberB -gt $numberA
-		}
-		else {
-			return $(if ($numberA -ge $numberB) { $VersionA } else { $VersionB })
-		}
-	}
-	$allModuleNames = $ModuleInventory.Keys | Sort-Object -Unique | Where-Object { $_ -and $_.Trim() }
-	$totalModules = $allModuleNames.Count
-	if ($totalModules -eq 0) {
-		New-Log "Module inventory is empty. Nothing to check." -Level INFO
+	$allModuleNames = $ModuleInventory.Keys | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique
+	if ($allModuleNames.Count -eq 0) {
+		New-Log "Module inventory is empty. Nothing to check."
 		return @()
 	}
-	$results = [System.Collections.Concurrent.ConcurrentBag[object]]::new()
-	New-Log "Starting parallel module update check for $totalModules modules (Throttle: $ThrottleLimit, Timeout: ${TimeoutSeconds}s)..." -Level SUCCESS
+	# --- Prepare Local Module Data ---
 	$moduleDataArray = @()
-	foreach ($moduleName in $allModuleNames) {
-		$localModules = $ModuleInventory[$moduleName]
-		if ($localModules -isnot [array]) {
-			$localModules = @($localModules)
+	foreach ($moduleNameInLoop in $allModuleNames) {
+		# Renamed to avoid conflict with $moduleName later
+		$localModulesInput = $ModuleInventory[$moduleNameInLoop]
+		if ($localModulesInput -is [PSCustomObject]) {
+			$localModulesInput = @($localModulesInput)
 		}
-		$res = @()
-		foreach ($module in $localModules) {
-			$moduleVersionCheck = Parse-ModuleVersion -VersionString $module.ModuleVersion
-			$res += [PSCustomObject]@{
-				ModuleVersion               = $moduleVersionCheck.ModuleVersion
-				ModuleVersionString         = $moduleVersionCheck.ModuleVersionString
-				ModuleVersionStringNoPrefix = $moduleVersionCheck.ModuleVersionStringNoPrefix
-				PreReleaseLabel             = $moduleVersionCheck.PreReleaseLabel
-				BasePath                    = $module.BasePath
-				isPreRelease                = $module.IsPreRelease -or $moduleVersionCheck.IsPrerelease
-				Author                      = $module.Author
+		$parsedVersions = $localModulesInput | Where-Object { $_ -and ($_.PSObject.Properties.Name -contains 'ModuleVersion' -or $_.PSObject.Properties.Name -contains 'ModuleVersionString') -and $_.PSObject.Properties.Name -contains 'BasePath' } | ForEach-Object {
+			[PSCustomObject]@{
+				ModuleVersion       = $_.ModuleVersion
+				ModuleVersionString = $_.ModuleVersionString
+				PreReleaseLabel     = $_.PreReleaseLabel
+				BasePath            = $_.BasePath
+				IsPreRelease        = $_.IsPrerelease
+				Author              = $_.Author
 			}
 		}
-		if ($res.Count -gt 0) {
-			$preview = $res | Where-Object { $_.isPreRelease -eq $true }
-			if ($preview) {
-				$highestLocalVersion = $preview | Sort-Object -Property { $_.ModuleVersion } -Descending | Select-Object -First 1
-				$res = $res | Where-Object { # Keep items that have different BasePath OR different ModuleVersionStringNoPrefix. Only keep one version of the same module+path+version, preferring the prerelease one
-					$_.BasePath -ne $highestLocalVersion.BasePath -or $_.ModuleVersionStringNoPrefix -ne $highestLocalVersion.ModuleVersionStringNoPrefix -or ($_.BasePath -eq $highestLocalVersion.BasePath -and $_.ModuleVersionStringNoPrefix -eq $highestLocalVersion.ModuleVersionStringNoPrefix -and $_.ModuleVersionString -eq $highestLocalVersion.ModuleVersionString)
-				}
-			}
-			else {
-				$highestLocalVersion = $res | Sort-Object -Property { $_.ModuleVersion } -Descending | Select-Object -First 1
-			}
+		if ($parsedVersions.Count -gt 0) {
+			$highestLocalVersionInstall = $parsedVersions | Sort-Object -Property @{E = { $_.ModuleVersion }; Descending = $true }, @{E = { $_.IsPreRelease }; Ascending = $true } | Select-Object -First 1
 			$moduleDataArray += [PSCustomObject]@{
-				ModuleName                  = $moduleName
-				HighestLocalVersion         = $highestLocalVersion.ModuleVersion
-				HighestLocalVersionString   = $highestLocalVersion.ModuleVersionString
-				HighestLocalVersionNoPrefix = $highestLocalVersion.ModuleVersionStringNoPrefix
-				AllVersions                 = $res
+				ModuleName          = $moduleNameInLoop
+				HighestLocalInstall = $highestLocalVersionInstall
+				AllParsedVersions   = $parsedVersions
 			}
 		}
 	}
-	$validModuleCount = $moduleDataArray.Count
-	New-Log "Prepared $validModuleCount modules with valid version info for checking." -Level DEBUG
-	$counters = [hashtable]::Synchronized(@{ Processed = 0; Updates = 0; Errors = 0; Timeouts = 0; StartTime = Get-Date; Total = $validModuleCount })
-	$NewLogDef = ${function:New-Log}.ToString()
-	$ComparePrereleaseVersionDef = ${function:Compare-PrereleaseVersion}.ToString()
-	$job = $null
-	$moduleDataArray | ForEach-Object -ThrottleLimit $ThrottleLimit -Parallel {
-		$job = $null
+	$validModuleCountForProcessing = $moduleDataArray.Count
+	if ($validModuleCountForProcessing -eq 0) {
+		New-Log "No valid modules remaining after pre-processing local inventory." -Level WARNING
+		return @()
+	}
+	New-Log "Prepared $validModuleCountForProcessing modules from local inventory." -Level VERBOSE
+	# --- STAGE 1: Pre-fetch Online Module Versions ---
+	New-Log "Starting online version pre-fetching for up to $($moduleDataArray.Count) modules..." -Level INFO
+	$overallOperationStartTime = Get-Date
+	$onlineModuleVersionsCache = [System.Collections.Concurrent.ConcurrentDictionary[string, object]]::new() # Thread-safe for direct assignment
+	$preFetchJobs = [System.Collections.Generic.List[System.Management.Automation.Job]]::new()
+	$findModuleScriptBlock = {
+		param(
+			$moduleNameToFetch,
+			$repositoriesForJob
+		)
+		# Ensure PSResourceGet cmdlets are available in the thread
+		# Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction SilentlyContinue -Force
+		# Import-Module PowerShellGet -ErrorAction SilentlyContinue -Force # For older systems if needed
+		$ErrorActionPreference = 'SilentlyContinue' # Let Find-Module try its best for each repo
+		$stableResult = $null
+		$prereleaseResult = $null
+		$fetchError = $null
 		try {
-			$moduleData = $_
-			$moduleName = $moduleData.ModuleName
-			$counters = $using:counters
-			$matchAuthor = $using:MatchAuthor.IsPresent
-			$results = $using:results
-			$blackList = $using:BlackList
-			$repositories = $using:Repositories
-			$timeoutSeconds = $using:TimeoutSeconds
-			${function:New-Log} = $using:NewLogDef
-			${function:Compare-PrereleaseVersion} = $using:ComparePrereleaseVersionDef
-			$isBlacklisted = $false
-			$repositoriesToCheck = $repositories
-			if ($blacklist -and $blackList.ContainsKey($moduleName)) {
-				$blacklistedRepos = $blackList[$moduleName]
-				if ($blacklistedRepos -eq '*') { $isBlacklisted = $true }
-				elseif ($blacklistedRepos -is [array]) { $repositoriesToCheck = $repositories | Where-Object { $blacklistedRepos -notcontains $_ }; if ($repositoriesToCheck.Count -eq 0) { $isBlacklisted = $true } }
-				elseif ($blacklistedRepos -is [string]) { $repositoriesToCheck = $repositories | Where-Object { $_ -ne $blacklistedRepos }; if ($repositoriesToCheck.Count -eq 0) { $isBlacklisted = $true } }
-				else { $isBlacklisted = $true }
+			$stableModuleInfo = Find-Module -Name $moduleNameToFetch -Repository $repositoriesForJob -ErrorAction SilentlyContinue -Verbose:$false |
+				Sort-Object -Property Version -Descending |
+					Select-Object -First 1
+			if ($stableModuleInfo) { $stableResult = $stableModuleInfo }
+		}
+		catch {
+			$fetchError = "Error finding stable for $moduleNameToFetch : $($_.Exception.Message)"
+		}
+		try {
+			$prereleaseModuleInfo = Find-Module -Name $moduleNameToFetch -AllowPrerelease -Repository $repositoriesForJob -ErrorAction SilentlyContinue -Verbose:$false |
+				Where-Object { ($_.PSObject.Properties['IsPrerelease'] -and $_.PSObject.Properties['IsPrerelease'].Value) -or ($_.Version.ToString() -match '-') } |
+					Sort-Object -Property Version -Descending |
+						Select-Object -First 1
+			if ($prereleaseModuleInfo) { $prereleaseResult = $prereleaseModuleInfo }
+		}
+		catch {
+			$fetchError = ($fetchError + "; " + "Error finding prerelease for $moduleNameToFetch : $($_.Exception.Message)").TrimStart('; ')
+		}
+		[pscustomobject]@{
+			ModuleName    = $moduleNameToFetch
+			Stable        = $stableResult
+			PreRelease    = $prereleaseResult
+			ErrorFetching = $fetchError # Store any caught error messages
+			Skipped       = $false
+		}
+	}
+	foreach ($moduleEntry in $moduleDataArray) {
+		$moduleNameToFetch = $moduleEntry.ModuleName
+		$currentRepositories = $Repositories # Start with all specified function repos
+		# Apply blacklist logic for repositories for this module
+		if ($BlackList -and $BlackList.ContainsKey($moduleNameToFetch)) {
+			$blacklistedReposSetting = $BlackList[$moduleNameToFetch]
+			if ($blacklistedReposSetting -eq '*') {
+				New-Log "[$moduleNameToFetch] Pre-fetch: Blacklisted ('*'). Skipping online check." -Level DEBUG
+				$onlineModuleVersionsCache[$moduleNameToFetch] = [pscustomobject]@{ ModuleName = $moduleNameToFetch; Stable = $null; PreRelease = $null; ErrorFetching = $null; Skipped = $true }
+				continue
 			}
-			$galleryModule = $null
-			if (-not $isBlacklisted -and $repositoriesToCheck.Count -gt 0) {
+			if ($blacklistedReposSetting -is [array]) {
+				$currentRepositories = $Repositories | Where-Object { $blacklistedReposSetting -notcontains $_ }
+			}
+			elseif ($blacklistedReposSetting -is [string]) {
+				$currentRepositories = $Repositories | Where-Object { $_ -ne $blacklistedReposSetting }
+			}
+			if ($currentRepositories.Count -eq 0) {
+				New-Log "[$moduleNameToFetch] Pre-fetch: Blacklisted due to repository exclusion for all specified repos. Skipping." -Level DEBUG
+				$onlineModuleVersionsCache[$moduleNameToFetch] = [pscustomobject]@{ ModuleName = $moduleNameToFetch; Stable = $null; PreRelease = $null; ErrorFetching = $null; Skipped = $true }
+				continue
+			}
+		}
+		if ($currentRepositories.Count -eq 0) {
+			# If $Repositories was empty to begin with
+			New-Log "[$moduleNameToFetch] Pre-fetch: No repositories specified to check. Skipping." -Level DEBUG
+			$onlineModuleVersionsCache[$moduleNameToFetch] = [pscustomobject]@{ ModuleName = $moduleNameToFetch; Stable = $null; PreRelease = $null; ErrorFetching = $null; Skipped = $true }
+			continue
+		}
+		$job = Start-ThreadJob -ScriptBlock $findModuleScriptBlock -ThrottleLimit $ThrottleLimit -ArgumentList @($moduleNameToFetch, $currentRepositories)
+		$job.PSObject.Properties.Add([psnoteproperty]::new("ModuleNameForJob", $moduleNameToFetch)) # Tag job with module name
+		$preFetchJobs.Add($job)
+		# Throttle job submission if using a very high number of modules with Start-ThreadJob's internal throttle
+		if ($preFetchJobs.Count % $ThrottleLimit -eq 0) {
+			Get-Job -State Running | Where-Object { $_.Id -in ($preFetchJobs.Id) } | Wait-Job -Any -Timeout ($TimeoutSeconds * 2) | Out-Null # Wait for any to free up a slot
+		}
+	}
+	New-Log "Waiting for $($preFetchJobs.Count) pre-fetch jobs to complete (Timeout per job: ${TimeoutSeconds}s)..." -Level INFO
+	$prefetchSync = [System.Collections.Hashtable]::Synchronized(@{ timeouts = 0 })
+	foreach ($jobInstance in $preFetchJobs) {
+		$jobModuleName = $jobInstance.PSObject.Properties["ModuleNameForJob"].Value
+		$waitSuccess = $jobInstance | Wait-Job -Timeout $TimeoutSeconds -ErrorAction SilentlyContinue
+		$jobOutput = $null
+		$jobErrors = $jobInstance.Error # Capture errors before Receive-Job might clear them for some job types
+		try {
+			$jobOutput = $jobInstance | Receive-Job -ErrorAction SilentlyContinue -Wait # Ensure it attempts to get all data
+		}
+		catch {
+			New-Log "[$jobModuleName] Pre-fetch: Error during Receive-Job: $($_.Exception.Message)" -Level WARNING
+		}
+		if (-not $waitSuccess -and $jobInstance.State -eq 'Running') {
+			New-Log "[$jobModuleName] Pre-fetch job timed out." -Level WARNING
+			$prefetchSync.timeouts++
+			$onlineModuleVersionsCache[$jobModuleName] = [pscustomobject]@{ ModuleName = $jobModuleName; Stable = $null; PreRelease = $null; ErrorFetching = "Pre-fetch job timed out."; Skipped = $false }
+			$jobInstance | Stop-Job -Force -ErrorAction SilentlyContinue
+		}
+		elseif ($jobInstance.State -ne 'Completed' -or ($jobInstance.State -eq 'Completed' -and -not $jobOutput)) {
+			$errMsg = "Pre-fetch job failed or returned no data. State: $($jobInstance.State)."
+			if ($jobErrors.Count -gt 0) {
+				$errMsg += " Job Errors: $($jobErrors | ForEach-Object { $_.Exception.ToString() } | Out-String -Width 200)"
+			}
+			New-Log "[$jobModuleName] $errMsg" -Level WARNING
+			$onlineModuleVersionsCache[$jobModuleName] = [pscustomobject]@{ ModuleName = $jobModuleName; Stable = $null; PreRelease = $null; ErrorFetching = $errMsg; Skipped = $false }
+		}
+		elseif ($jobOutput) {
+			$onlineModuleVersionsCache[$jobOutput.ModuleName] = $jobOutput # jobOutput.ModuleName should be reliable
+		}
+		Remove-Job $jobInstance -ErrorAction SilentlyContinue
+	}
+	New-Log "Online version pre-fetching complete. Cached data for $($onlineModuleVersionsCache.Count) modules. Timeouts: $($prefetchSync.timeouts)" -Level INFO
+	$preFetchDuration = (Get-Date) - $overallOperationStartTime
+	New-Log "Pre-fetching (Stage 1) took: $($preFetchDuration.ToString("g"))" -Level INFO
+	# Ensure all modules in $moduleDataArray have an entry in $onlineModuleVersionsCache
+	foreach ($moduleEntry in $moduleDataArray) {
+		if (-not $onlineModuleVersionsCache.ContainsKey($moduleEntry.ModuleName)) {
+			New-Log "[$($moduleEntry.ModuleName)] No pre-fetched data found post-job processing. Marking as error/skipped." -Level WARNING
+			$onlineModuleVersionsCache[$moduleEntry.ModuleName] = [pscustomobject]@{
+				ModuleName = $moduleEntry.ModuleName; Stable = $null; PreRelease = $null; ErrorFetching = "Data not found in pre-fetch cache."; Skipped = $true
+			}
+		}
+	}
+	# --- STAGE 2: Parallel Processing with Pre-fetched Data ---
+	$results = [System.Collections.Concurrent.ConcurrentBag[object]]::new()
+	$sync = [System.Collections.Hashtable]::Synchronized(@{
+			processed = 0; updates = 0; errors = 0; #timeouts = 0 (timeouts handled in prefetch)
+			total = $validModuleCountForProcessing; startTime = Get-Date
+		})
+	$NewLogDef = ${function:New-Log}.ToString()
+	$CompareModuleVersionDef = ${function:Compare-ModuleVersion}.ToString()
+	New-Log "Starting parallel update comparison for $($moduleDataArray.Count) modules (Throttle: $ThrottleLimit)..." -Level SUCCESS
+	$moduleDataArray | ForEach-Object -ThrottleLimit $ThrottleLimit -Parallel {
+		$script:ErrorActionPreference = 'Continue' # Set for this parallel runspace
+		$moduleData = $_
+		$moduleName = $moduleData.ModuleName
+		$sync = $using:sync
+		$VerbosePreference = $using:VerbosePreference
+		${function:New-Log} = $using:NewLogDef
+		${function:Compare-ModuleVersion} = $using:CompareModuleVersionDef
+		$results = $using:results
+		$matchAuthor = $using:MatchAuthor.IsPresent
+		$onlineCache = $using:onlineModuleVersionsCache # Access the main cache
+		try {
+			$highestLocalInstall = $moduleData.HighestLocalInstall
+			if (-not $highestLocalInstall) {
+				New-Log "[$moduleName] Pre-processed HighestLocalInstall object missing. Skipping." -Level WARNING
+				$sync.errors++
+				return
+			}
+			$onlineModuleData = $null
+			if (-not $onlineCache.TryGetValue($moduleName, [ref]$onlineModuleData)) {
+				New-Log "[$moduleName] Could not retrieve pre-fetched data from cache. Skipping." -Level WARNING
+				$sync.errors++
+				return
+			}
+			if ($onlineModuleData.Skipped -or (-not $onlineModuleData.Stable -and -not $onlineModuleData.PreRelease -and $onlineModuleData.ErrorFetching)) {
+				if ($onlineModuleData.Skipped) {
+					New-Log "[$moduleName] Skipping processing: Pre-fetch marked as skipped (e.g., blacklist)." -Level WARNING
+				}
+				else {
+					New-Log "[$moduleName] Skipping processing: No online versions found or error during pre-fetch: $($onlineModuleData.ErrorFetching)" -Level VERBOSE
+				}
+				return
+			}
+			$stableModule = $onlineModuleData.Stable
+			$preReleaseModule = $onlineModuleData.PreRelease
+			$galleryModule = $null # This will be the selected latest online module info
+			if ($stableModule -and $preReleaseModule) {
+				$stableVerStr = $stableModule.Version.ToString()
+				$prereleaseVerStr = $preReleaseModule.Version.ToString()
+				$prereleaseLbl = $preReleaseModule.PSObject.Properties['PreRelease'].Value # Access PreRelease label, could be $null
+				$fullPrereleaseVerStr = if (-not [string]::IsNullOrEmpty($prereleaseLbl)) { "$prereleaseVerStr-$prereleaseLbl" } else { $prereleaseVerStr }
 				try {
-					$jobScriptBlock = {
-						param($modName, $repos)
-						Find-Module -Name $modName -AllowPrerelease -Repository $repos -ErrorAction SilentlyContinue | Sort-Object -Property @{E = { [version]$_.Version }; Descending = $true } | Select-Object -First 1
-					}
-					$job = Start-Job -ScriptBlock $jobScriptBlock -ArgumentList $moduleName, $repositoriesToCheck
-					New-Log "Started job $($job.Id) to find module '$moduleName' in $($repositoriesToCheck -join ', ')" -Level VERBOSE
-					$waitResult = $job | Wait-Job -Timeout $timeoutSeconds -ErrorAction SilentlyContinue
-					if ($job.State -eq 'Running') {
-						New-Log "Timeout ($($timeoutSeconds)s) waiting for Find-Module job for '$moduleName'." -Level WARNING
-						$counters.Timeouts++
-						try { $job | Stop-Job -ErrorAction SilentlyContinue } catch {}
-					}
-					elseif ($job.State -eq 'Completed') {
-						$galleryModule = $job | Receive-Job
-						if ($galleryModule) { New-Log "Job $($job.Id) completed. Found '$moduleName' version $($galleryModule.Version)." -Level DEBUG }
-						else { New-Log "Job $($job.Id) completed. Module '$moduleName' not found in specified repositories." -Level VERBOSE }
-					}
-					else {
-						$reason = ($job | Select-Object -ExpandProperty JobStateInfo).Reason
-						New-Log "Find-Module job $($job.Id) for '$moduleName' failed or ended unexpectedly. State: $($job.State). Reason: $reason" -Level WARNING
-						$counters.Errors++
-					}
+					$isPreReleaseNewer = Compare-ModuleVersion -VersionA $stableVerStr -VersionB $fullPrereleaseVerStr -ReturnBoolean
+					$galleryModule = if ($isPreReleaseNewer) { $preReleaseModule } else { $stableModule }
+					New-Log "[$moduleName] Cache: Both stable ($stableVerStr) and prerelease ($fullPrereleaseVerStr) found. Selected: $($galleryModule.Version)$(if($galleryModule.PSObject.Properties['PreRelease'].Value){ "-$($galleryModule.PSObject.Properties['PreRelease'].Value)" })" -Level SUCCESS
 				}
 				catch {
-					New-Log "Error managing Find-Module job for '$moduleName'" -Level ERROR
-					$counters.Errors++
-				}
-				if ($galleryModule) {
-					try {
-						$modueResults = @()
-						$filtered = @()
-						foreach ($currentModule in $moduleData.AllVersions) {
-							if ($matchAuthor -and $galleryModule.Author -notmatch $currentModule.Author) {
-								if($moduleName -notin $filtered){
-									New-Log "Filtering out '$moduleName' since -MatchAuthor is used and the Authors doesn't match." -Level WARNING
-								}
-								$filtered += $moduleName
-								continue
-							}
-							$needsUpdate = $false
-							[version]$highestLocal = $currentModule.ModuleVersion
-							[string]$highestLocalStr = $currentModule.ModuleVersionString
-							[version]$latestOnline = $galleryModule.Version
-							[string]$latestOnlineStr = $($galleryModule.Version)
-							if ($latestOnline -gt $highestLocal) {
-								$needsUpdate = $true
-							}
-							if (-not $needsUpdate) {
-								[string]$onlinePreLabel = $($galleryModule.Prerelease)
-								[string]$localPreLabel = $currentModule.PreReleaseLabel
-								if ($localPreLabel -and $onlinePreLabel) {
-									$preRelease = $false
-									$needsUpdate = Compare-PrereleaseVersion -VersionA $localPreLabel -VersionB $onlinePreLabel -ReturnBoolean
-									if ($needsUpdate) {
-										New-Log "Online pre-release '$onlinePreLabel' is newer than local '$localPreLabel' for version $latestOnlineStr." -Level SUCCESS
-										$preRelease = $true
-									}
-									else {
-										New-Log "Comparing pre-release versions: $onlinePreLabel not newer then $localPreLabel" -Level DEBUG
-									}
-								}
-							}
-							if ($needsUpdate) {
-								$modulesByPath = $moduleData.AllVersions | Group-Object -Property BasePath
-								$outdatedPaths = @()
-								foreach ($pathGroup in $modulesByPath) {
-									$hasUpToDateVersion = $pathGroup.Group | Where-Object {	$_.ModuleVersion -eq $latestOnline -or ($_.ModuleVersion -eq $latestOnline -and $_.PreReleaseLabel -eq $galleryModule.Prerelease) } | Select-Object -First 1 # Check if any module in this path is up-to-date
-									if (-not $hasUpToDateVersion) {
-										$outdatedPaths += $pathGroup.Name # If no up-to-date version exists in this path, add it to outdated paths
-										New-Log "Update found for '$moduleName': Local '$highestLocalStr' -> Online '$latestOnlineStr'" -Level SUCCESS
-									}
-								}
-								if ($outdatedPaths) {
-									$modueResults += ([PSCustomObject]@{
-											ModuleName          = $moduleName
-											HighestLocalVersion = $moduleData.HighestLocalVersion
-											LatestVersion       = $latestOnline
-											LatestVersionString = $latestOnlineStr
-											LocalVersion        = $highestLocal
-											LocalVersionString  = $highestLocalStr
-											IsPreview           = [bool]$galleryModule.Prerelease
-											Repository          = $galleryModule.Repository
-											OutdatedPaths       = $outdatedPaths
-											PreReleaseVersion   = $galleryModule.Prerelease
-											GalleryData         = $galleryModule
-											LocalData           = $moduleData
-											Author              = $currentModule.Author
-											GalleryAuthor       = $galleryModule.Author
-										})
-								}
-							}
-						}
-						if ($modueResults.Count -gt 0) {
-							$results.Add($modueResults)
-							$counters.Updates++
-						}
-					}
-					catch {
-						New-Log "Error comparing versions for '$moduleName'" -Level ERROR
-						$counters.Errors++
-					}
+					$galleryModule = $stableModule
+					New-Log "[$moduleName] Cache: Error comparing versions. Defaulting to stable ($stableVerStr)." -Level VERBOSE
+					$sync.errors++
 				}
 			}
-			elseif ($isBlacklisted) {
-				New-Log "Skipping check for '$moduleName' due to blacklist." -Level WARNING
+			elseif ($preReleaseModule) {
+				$galleryModule = $preReleaseModule
+				New-Log "[$moduleName] Cache: Only prerelease version found: $($preReleaseModule.Version)$(if($preReleaseModule.PSObject.Properties['PreRelease'].Value){"-$($preReleaseModule.PSObject.Properties['PreRelease'].Value)"})" -Level VERBOSE
+			}
+			elseif ($stableModule) {
+				$galleryModule = $stableModule
+				New-Log "[$moduleName] Cache: Only stable version found: $($stableModule.Version)" -Level VERBOSE
+			}
+			if (-not $galleryModule) {
+				New-Log "[$moduleName] No suitable online module version determined from pre-fetched data." -Level WARNING
+				return
+			}
+			# --- Continue with version comparison and other checks ---
+			[string]$latestOnlineStr = if ($galleryModule.PSObject.Properties['PreRelease'].Value) {
+				"$($galleryModule.Version)-$($galleryModule.PSObject.Properties['PreRelease'].Value)".Trim()
 			}
 			else {
-				New-Log "Skipping check for '$moduleName' as no repositories remained after blacklist filter." -Level WARNING
+				"$($galleryModule.Version)".Trim()
+			}
+			[string]$highestLocalStr = if ($highestLocalInstall.IsPrerelease -and $highestLocalInstall.PreReleaseLabel) {
+				"$($highestLocalInstall.ModuleVersion)-$($highestLocalInstall.PreReleaseLabel)"
+			}
+			else {
+				"$($highestLocalInstall.ModuleVersion)"
+            }
+			if ([string]::IsNullOrWhiteSpace($latestOnlineStr) -or [string]::IsNullOrWhiteSpace($highestLocalStr)) {
+				New-Log "[$moduleName] Invalid online ('$latestOnlineStr') or local ('$highestLocalStr') version string. Skipping." -Level VERBOSE
+				$sync.errors++
+				return
+			}
+			$needsOverallUpdate = $false
+			try {
+				if (Compare-ModuleVersion -VersionA $highestLocalStr -VersionB $latestOnlineStr -ReturnBoolean) {
+					$needsOverallUpdate = $true
+					New-Log "[$moduleName] Comparison: Online ($latestOnlineStr) IS NEWER than Local ($highestLocalStr)" -Level VERBOSE
+				}
+				else {
+					New-Log "[$moduleName] Comparison: Online ($latestOnlineStr) not newer than Local ($highestLocalStr)" -Level VERBOSE
+				}
+			}
+			catch {
+				New-Log "[$moduleName] Error comparing versions $highestLocalStr and $latestOnlineStr : $($_.Exception.Message)." -Level ERROR
+				$sync.errors++
+				return
+			}
+			if ($needsOverallUpdate -and $matchAuthor) {
+				# ... (Author matching logic - ensure $galleryModule.Author and $highestLocalInstall.Author are accessed)
+				$localAuthor = $highestLocalInstall.Author
+				$galleryAuthor = $galleryModule.Author # Assuming Find-Module result has .Author
+				$authorsMatch = $false
+				$normalizedLocalAuthor = [Regex]::Replace($localAuthor, '[^a-zA-Z0-9]', '')
+				$normalizedGalleryAuthor = [Regex]::Replace($galleryAuthor, '[^a-zA-Z0-9]', '')
+				if ($normalizedLocalAuthor -and $normalizedGalleryAuthor -and $normalizedGalleryAuthor -match $normalizedLocalAuthor) {
+					# Simple equality for now
+					New-Log "[$moduleName] Author Match: OK (Local: '$localAuthor', Online: '$galleryAuthor')." -Level VERBOSE
+					$authorsMatch = $true
+				}
+				if (-not $authorsMatch) {
+					New-Log "[$moduleName] Skipping update: -MatchAuthor specified and authors do not match (Local: '$localAuthor', Online: '$galleryAuthor')." -Level VERBOSE
+					$needsOverallUpdate = $false
+				}
+			}
+			if ($needsOverallUpdate) {
+				# ... (Your logic for $outdatedInstallationsDetailed)
+				$outdatedInstallationsDetailed = @()
+				$allLocalInstalls = $moduleData.AllParsedVersions # This is an array of PSCustomObjects
+				# Group by BasePath to check each unique installation location
+				$installsByPath = $allLocalInstalls | Group-Object -Property BasePath
+				foreach ($pathGroup in $installsByPath) {
+					$currentPath = $pathGroup.Name
+					$versionsInThisPath = $pathGroup.Group # Array of local installs at this path
+					$latestOnlineVersionFoundInThisPath = $false
+					foreach ($installedVersionEntry in $versionsInThisPath) {
+						if ($installedVersionEntry.ModuleVersionString -eq $latestOnlineStr) {
+							$latestOnlineVersionFoundInThisPath = $true; break
+						}
+					}
+					if (-not $latestOnlineVersionFoundInThisPath) {
+						# This path lacks the latest, add all versions from this path as outdated
+						foreach ($outdatedInstall in $versionsInThisPath) {
+							$outdatedInstallationsDetailed += [PSCustomObject]@{
+								Path             = $outdatedInstall.BasePath
+								InstalledVersion = $outdatedInstall.ModuleVersionString
+							}
+						}
+					}
+				}
+				if ($outdatedInstallationsDetailed.Count -gt 0) {
+					$uniqueOutdatedModules = $outdatedInstallationsDetailed | Sort-Object Path, InstalledVersion -Unique
+					$resultObject = [PSCustomObject]@{
+						ModuleName          = $moduleName
+						Repository          = $galleryModule.Repository
+						IsPreview           = if ($galleryModule.PSObject.Properties['PreRelease'].Value) { $true } else { $false }
+						PreReleaseVersion   = $galleryModule.PSObject.Properties['PreRelease'].Value
+						HighestLocalVersion = $highestLocalInstall.ModuleVersion # This is a [Version] object
+						LatestVersion       = [version]$galleryModule.Version # Ensure this is also a [Version] object
+						LatestVersionString = $latestOnlineStr
+						OutdatedModules     = $uniqueOutdatedModules
+						Author              = $highestLocalInstall.Author
+						GalleryAuthor       = $galleryModule.Author
+					}
+					$results.Add($resultObject)
+					New-Log "[$moduleName] Update found: Local '$highestLocalStr' -> Online '$latestOnlineStr'. $($uniqueOutdatedModules.Count) outdated paths." -Level SUCCESS
+					$sync.updates++
+				}
+				else {
+					New-Log "[$moduleName] Overall update flagged, but no specific paths found lacking '$latestOnlineStr'. This might indicate all paths are up-to-date or an issue in logic." -Level VERBOSE
+				}
 			}
 		}
 		catch {
-			New-Log "Unhandled error during processing for module '$moduleName'" -Level ERROR
-			$counters.Errors++
+			New-Log "[$moduleName] Unhandled error in parallel processing" -Level ERROR
+			$sync.errors++
 		}
 		finally {
-			if ($job -ne $null -and $job.State -ne 'Removed') {
-				New-Log "Performing final cleanup for job $($job.Id) (State: $($job.State))..." -Level VERBOSE
-				try {
-					$job | Remove-Job -Force -ErrorAction Stop
-					New-Log "Job $($job.Id) removed." -Level VERBOSE
+			$sync.processed++
+			$percentComplete = [math]::Min(100, ($sync.processed / $sync.total) * 100)
+			[int]$numberOfMoudules = [math]::Ceiling($sync.total / 20)
+			if (($sync.processed % $numberOfMoudules -eq 0) -or $sync.processed -eq $sync.total) {
+				$elapsed = (Get-Date) - $sync.startTime
+				$avgTimePerModule = if ($sync.processed -gt 0) { $elapsed.TotalSeconds / $sync.processed } else { 0 }
+				$remainingModules = $sync.total - $sync.processed
+				$etaSeconds = $avgTimePerModule * $remainingModules
+				$etaString = if ($etaSeconds -gt 0) {
+					$eta = [timespan]::FromSeconds($etaSeconds)
+					"$($eta.Minutes.ToString('00')):$($eta.Seconds.ToString('00'))"
 				}
-				catch {
-					New-Log "Error during final removal of job '$($job.Id)'" -Level ERROR
+				else {
+					"00:00"
 				}
-			}
-			$currentCount = [System.Threading.Interlocked]::Increment([ref]$counters.Processed)
-			if ($currentCount % 20 -eq 0 -or $currentCount -eq $counters.Total) {
-				try { ${function:New-Log} = $using:NewLogDef } catch {}
-				$elapsed = (Get-Date) - $counters.StartTime
-				$percentComplete = [Math]::Round(($currentCount / $counters.Total) * 100, 0)
-				$eta = "N/A"
-				if ($elapsed.TotalSeconds -gt 5 -and $currentCount -gt 0) {
-					$avgTimePerModule = $elapsed.TotalSeconds / $currentCount
-					$remainingModules = $counters.Total - $currentCount
-					$remainingSeconds = $avgTimePerModule * $remainingModules
-					if ($remainingSeconds -lt 0) { $remainingSeconds = 0 }
-					$eta = "{0:mm\:ss}" -f [timespan]::FromSeconds($remainingSeconds)
-				}
-				$progressMsg = "[$percentComplete% ($currentCount/$($counters.Total))] Updates: $($counters.Updates), Timeouts: $($counters.Timeouts), Errors: $($counters.Errors), ETA: $eta"
-				New-Log $progressMsg -Level SUCCESS
+				$progressMsg = "Progress: $([math]::Round($percentComplete, 0))% ($($sync.processed)/$($sync.total)) | Updates: $($sync.updates), Errors: $($sync.errors) | Elapsed: {0:mm\:ss} | ETA: $etaString" -f $elapsed
+				New-Log $progressMsg -Level DEBUG
 			}
 		}
 	}
-	$moduleSummary = @($results)
-	$totalTime = (Get-Date) - $counters.StartTime
-	$secondsElapsed = $totalTime.TotalSeconds.ToString('F1')
-	New-Log "Completed check of $validModuleCount modules in $secondsElapsed seconds. Found $($counters.Updates) updates." -Level SUCCESS
-	if ($counters.Timeouts -gt 0) { New-Log "$($counters.Timeouts) module checks timed out." -Level WARNING }
-	if ($counters.Errors -gt 0) { New-Log "Encountered $($counters.Errors) errors during processing." -Level WARNING }
-	if ($moduleSummary) {
-		$finalResults = @{}
-		foreach ($module in $moduleSummary) {
-			$moduleName = ($module.ModuleName | Select-Object -Unique)
-			if ($finalResults.ContainsKey($moduleName)) {
-				continue
-			}
-			$outdatedModulesInfo = $module | Select-Object @{Name = 'Path'; Expression = { $_.OutdatedPaths } }, @{Name = 'InstalledVersion'; Expression = { $_.LocalVersionString } } | Sort-Object Path, InstalledVersion -Unique
-			$moduleValue = [PSCustomObject]@{
-				Repository          = ($module.Repository | Select-Object -Unique)
-				IsPreview           = $module.IsPreview | Select-Object -Unique
-				PreReleaseVersion   = ($module.PreReleaseVersion | Select-Object -Unique)
-				HighestLocalVersion = ($module.HighestLocalVersion | Select-Object -Unique)
-				LatestVersion       = ($module.LatestVersion | Select-Object -Unique)
-				LatestVersionString = ($module.LatestVersionString | Select-Object -Unique)
-				OutdatedModules     = $outdatedModulesInfo
-				Author              = ($module.Author | Select-Object -First 1 -Unique)
-				GalleryAuthor       = ($module.GalleryAuthor | Select-Object -First 1 -Unique)
-			}
-			if (-not $finalResults.ContainsKey($moduleName)) {
-				$finalResults[$moduleName] = $moduleValue
-			}
-		}
-		$moduleObjects = $finalResults.GetEnumerator() | ForEach-Object {
-			$moduleName = $_.Key
-			$moduleData = $_.Value
-			$properties = @{
-				ModuleName = $moduleName
-			}
-			foreach ($property in $moduleData.PSObject.Properties) {
-				$properties[$property.Name] = $property.Value
-			}
-			[PSCustomObject]$properties
-		}
+	# --- Final Results Processing ---
+	$moduleObjects = @($results) # $results is the ConcurrentBag
+	$finalOverallTime = (Get-Date) - $overallOperationStartTime # Corrected total time calculation
+	New-Log "Pre-fetching (Stage 1) duration: $($preFetchDuration.ToString("g"))" -Level INFO
+	New-Log "Comparison (Stage 2) duration: $(($finalOverallTime - $preFetchDuration).ToString("g"))" -Level INFO # Duration of Stage 2
+	# Use $finalOverallTime for the final summary
+	New-Log "Completed check of $($sync.total) modules in $($finalOverallTime.ToString("g")). Found $($moduleObjects.Count) modules needing updates." -Level SUCCESS
+	if ($prefetchSync.timeouts -gt 0) {
+		# Report timeouts from the prefetch stage
+		New-Log "$($prefetchSync.timeouts) module pre-fetch checks timed out." -Level WARNING
 	}
-	return $moduleObjects
+	if ($sync.errors -gt 0) {
+		# Report errors from Stage 2's sync context
+		New-Log "Encountered $($sync.errors) errors during comparison processing." -Level WARNING
+	}
+	return $moduleObjects | Sort-Object ModuleName
 }
+#endregion Get-ModuleUpdateStatus
+#region Update-Modules
 function Update-Modules {
-	[CmdletBinding()]
+	<#
+	.SYNOPSIS
+	Installs the latest versions of modules identified as outdated, optionally cleaning up old versions.
+	.DESCRIPTION
+	This function takes an array of module update objects (typically the output from `Get-ModuleUpdateStatus`) and attempts to install the specified newer version for each module.
+	It iterates through the provided module objects. For each module:
+	1.  It determines the exact target version string to install (e.g., "2.1.0" or "2.1.0-preview3") using the `LatestVersionString` property from the input object (or constructing it from `LatestVersion` and `PreReleaseVersion` if `LatestVersionString` is not directly available). It also parses this version using `Parse-ModuleVersion` to get structured version info.
+	2.  It identifies the source repository and the unique base paths where outdated versions of this module currently exist (from the `OutdatedModules.Path` property of the input object).
+	3.  It calls the internal helper function `Install-PSModule`.
+	`Install-PSModule` is responsible for the actual installation. It receives the module name, base version string (e.g., "2.1.0"), the full pre-release version string if applicable (e.g., "2.1.0-preview3"), repository, pre-release status, and the list of destination base paths.
+	`Install-PSModule` prioritizes using `Save-PSResource` to place the module into the parent directory of these destination base paths (e.g., if an old version is in 'C:\Modules\MyModule\1.0', it tries to save to 'C:\Modules'). This allows more precise control over the installation location.
+	If `Save-PSResource` fails or isn't suitable for all paths, `Install-PSModule` falls back to using `Install-PSResource -Scope AllUsers` and then `Install-Module -Scope AllUsers` as secondary attempts. These fallbacks have less control over the exact installation location if multiple PSModulePaths exist and might install to a default system path.
+	4.  If the `-Clean` switch is specified AND the update installation is reported as successful for a module (meaning the new version was installed or confirmed in at least one of the targeted base paths), the function then calls another internal helper `Remove-OutdatedVersions`.
+	`Remove-OutdatedVersions` attempts to remove the older version directories of the updated module from the paths where the update was successfully installed.
+	It uses `Uninstall-PSResource` for each old version directory and may fall back to `Remove-Item -Recurse -Force`.
+	*   Certain critical modules (e.g., 'PowerShellGet', 'Microsoft.PowerShell.PSResourceGet') are excluded from cleaning by default.
+	The function reports the success or failure for each module update attempt, including which base paths were successfully updated, which failed, and (if -Clean was used) which old version paths were removed. A progress bar can optionally be displayed using `-UseProgressBar`.
+	.PARAMETER OutdatedModules
+	[Mandatory, ValueFromPipeline] An array of PSCustomObjects detailing the modules to update. Each object must contain at least the following properties (this format matches the output of `Get-ModuleUpdateStatus`):
+	- ModuleName ([string]): The name of the module.
+	- LatestVersion ([System.Version] or a string parsable into a version): The base version object of the update (e.g., for "2.1.0-preview3", this would be "2.1.0"). Used to derive the base version string.
+	- LatestVersionString ([string], optional but preferred): The full string representation of the latest version to install (e.g., "2.1.0", "2.1.0-preview3"). If not present, it's constructed from `LatestVersion` and `PreReleaseVersion`.
+	- Repository ([string]): The name of the repository from which to install the update.
+	- IsPreview ([bool]): True if the `LatestVersionString` (or equivalent constructed version) represents a pre-release version.
+	- PreReleaseVersion ([string], optional): The pre-release tag of the `LatestVersionString` (e.g., "preview3"), if applicable. Used with `LatestVersion` if `LatestVersionString` is absent.
+	- OutdatedModules ([PSCustomObject[]]): An array of objects, each representing an outdated installation. Each of these sub-objects must have at least a `Path` property ([string]) indicating the base installation path of an outdated version (e.g., "C:\Program Files\PowerShell\Modules\MyModule").
+	.PARAMETER Clean
+	If specified, the function will attempt to remove the directories of the older versions of a module *after* its update has been successfully installed in a given path. This operation uses `Uninstall-PSResource` and, as a fallback, `Remove-Item -Recurse -Force`. Use with caution.
+	.PARAMETER UseProgressBar
+	If specified, displays a progress bar tracking the overall module update process.
+	.PARAMETER PreRelease
+	If specified, signals the user's intent to allow installation of pre-release versions if they are identified in the `-OutdatedModules` input. The function primarily relies on the `IsPreview` flag and the version string format (e.g., "x.y.z-tag") within the input objects to determine if a module version is a pre-release and to pass appropriate flags (`-Prerelease`, `-AllowPrerelease`) to the underlying installation cmdlets. This switch serves as a confirmation and may influence verbose logging but does not override the data-driven pre-release determination from the input.
+	.INPUTS
+	System.Management.Automation.PSCustomObject[]
+	Accepts an array of module update objects (matching the output structure of `Get-ModuleUpdateStatus`) via the pipeline or the `-OutdatedModules` parameter.
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject[]
+	Returns an array of PSCustomObjects, each summarizing the result of the update attempt for a single module:
+	- ModuleName ([string]): The name of the module.
+	- NewVersionPreRelease ([string]): The full version string (including any pre-release tag) of the version that was attempted/installed (e.g., "2.1.0-preview3"). If not a pre-release, this will be the same as NewVersion.
+	- NewVersion ([string]): The base version string (e.g., "2.1.0") of the version that was attempted/installed.
+	- UpdatedPaths ([string[]]): An array of base paths (from the input module's `OutdatedModules.Path`) where the update was successfully installed or confirmed to exist.
+	- FailedPaths ([string[]]): An array of base paths (from the input module's `OutdatedModules.Path`) where the update attempt failed.
+	- OverallSuccess ([bool]): True if `FailedPaths` is empty and `UpdatedPaths` is not empty, indicating the module was updated in all targeted original locations or a general successful install occurred that covered at least one target.
+	- CleanedPaths ([string[]] or [string]): Present if `-Clean` was specified. An array of full paths to the old version directories that were successfully removed. If cleaning was attempted but no items were removed for a module, this might be a string message like "Cleaning attempted but no paths removed." or "Skipped by ShouldProcess".
+	.EXAMPLE
+	# Scenario: Find outdated modules and update them, cleaning old versions.
+	PS C:\> $moduleInventory = Get-ModuleInfo -Paths ($env:PSModulePath -split ';')
+	PS C:\> $updatesToInstall = Get-ModuleUpdateStatus -ModuleInventory $moduleInventory -Repositories 'PSGallery'
+	PS C:\> if ($updatesToInstall) {
+	PS C:\>     $updateResults = $updatesToInstall | Update-Modules -Clean -UseProgressBar -PreRelease -Verbose
+	PS C:\>     $updateResults | Format-Table ModuleName, NewVersionPreRelease, OverallSuccess, CleanedPaths
+	PS C:\> } else { Write-Host "No module updates found." }
+	This example first gets module inventory, then checks for updates against PSGallery. If updates are found, it pipes them to `Update-Modules` to install them (respecting pre-release status from input, confirmed by -PreRelease), cleans up old versions after successful updates, shows a progress bar, and provides verbose output. Administrator privileges are typically required.
+	.EXAMPLE
+	# Scenario: Update only a specific module from a previously generated list of updates.
+	PS C:\> $specificUpdate = $allUpdates | Where-Object ModuleName -eq 'PSScriptAnalyzer'
+	PS C:\> Update-Modules -OutdatedModules $specificUpdate -Verbose
+	Updates only the 'PSScriptAnalyzer' module (if present in `$specificUpdate`), without cleaning old versions or showing a progress bar by default.
+	.NOTES
+	- Requires Administrator privileges to install modules to system locations (e.g., Program Files) and to remove old versions from these locations.
+	- Depends on `Microsoft.PowerShell.PSResourceGet` module for `*-PSResource*` cmdlets. It may fall back to `Install-Module` (from `PowerShellGet`) if `Install-PSResource` encounters issues.
+	- Relies on internal helper functions `Install-PSModule` and `Remove-OutdatedVersions`, and an external `New-Log` function.
+	- The `-Clean` operation uses `Remove-Item -Recurse -Force` as a fallback. Always review modules and paths before using `-Clean`.
+	- The success of installing to specific original `Destinations` (derived from outdated module paths) relies heavily on `Save-PSResource`. Fallback installation methods might install to a default `AllUsers` path, which may or may not align with all originally intended outdated paths. The `UpdatedPaths` output reflects where the new version is confirmed relative to the input paths.
+	.LINK
+	Get-ModuleUpdateStatus
+	Get-ModuleInfo
+	Save-PSResource
+	Install-PSResource
+	Uninstall-PSResource
+	Install-Module
+	Remove-Item
+	Write-Progress
+	Parse-ModuleVersion
+	#>
+	[CmdletBinding(SupportsShouldProcess = $true)]
 	param (
-		[Parameter(ValueFromPipeline)][Object[]]$OutdatedModules,
+		[Parameter(ValueFromPipeline, Mandatory)][Object[]]$OutdatedModules,
 		[switch]$Clean,
 		[switch]$UseProgressBar,
-		[switch]$PreRelease
+		[switch]$PreRelease # Helps signal intent for handling preview modules specified in input
 	)
 	begin {
 		$aggregateResults = [System.Collections.Generic.List[object]]::new()
-		$batchModules = @()
+		$batchModules = @() # Collect all modules from pipeline input first
+		New-Log "Initializing module update process." -Level VERBOSE
 	}
 	process {
+		New-Log "Receiving $($OutdatedModules.Count) module(s) from pipeline/parameter." -Level VERBOSE
 		foreach ($module in $OutdatedModules) {
 			$batchModules += $module
 		}
 	}
 	end {
 		if ($batchModules.Count -eq 0) {
-			New-Log "No modules provided for update. Aborting." -Level INFO
+			New-Log "No modules provided for update. Exiting."
 			return
 		}
 		$total = $batchModules.Count
-		New-Log "Starting update process for $total modules." -Level INFO
 		$current = 0
 		foreach ($module in $batchModules) {
 			$current++
 			$moduleName = $module.ModuleName
-			[version]$latestVer = $module.LatestVersion
-			[string]$latestVerStr = $module.LatestVersionString
-			[string]$preReleaseVersion = $module.PreReleaseVersion
-			$outdatedVersions = @($module.OutdatedModules.InstalledVersion | Select-Object -Unique)
+			New-Log "[$moduleName] Starting update process for $total modules."
+			[string]$targetVersionString = $($module.LatestVersion)
+			[version]$latestVer = $null # This will hold the base [version] object
+			# Try parsing the target string
+			if ($module.isPreView) {
+				$parsedTargetVersion = Parse-ModuleVersion -VersionString "$($targetVersionString)-$($module.PreReleaseVersion)" -ErrorAction SilentlyContinue
+				[string]$preReleaseVersion = $parsedTargetVersion.PreReleaseVersion
+			}
+			else {
+				$parsedTargetVersion = Parse-ModuleVersion -VersionString $targetVersionString -ErrorAction SilentlyContinue
+				[string]$preReleaseVersion = $null
+			}
+			if (-not $parsedTargetVersion -or -not $parsedTargetVersion.ModuleVersion) {
+				New-Log "[$current/$total] Skipping module [$moduleName]: Could not parse Target Version String '$targetVersionString' using Parse-ModuleVersion. Will skip." -Level WARNING
+				$aggregateResults.Add([PSCustomObject]@{
+						ModuleName           = $moduleName
+						NewVersionPreRelease = if ($module.IsPreview) { "$($targetVersionString)-$($module.PreReleaseVersion)" } # Report the problematic string
+						NewVersion           = $targetVersionString
+						UpdatedPaths         = @()
+						FailedPaths          = @("Version parsing failed: $targetVersionString")
+						OverallSuccess       = $false
+					})
+				continue # Skip to the next module
+			}
+			$latestVer = $parsedTargetVersion.ModuleVersion # The [version] object
+			[string]$baseVerStr = $latestVer.ToString() # Base version string without pre-release tag
 			$repository = $module.Repository
-			$isPreview = $module.IsPreview -or ($PreRelease.IsPresent -and $module.IsPreview)
-			$outdatedPaths = @($module.OutdatedModules.Path) # Paths where OLD versions exist
+			# Determine if it's a preview install based on input object's flag *and* if the version string *looks* like a prerelease
+			# Use $PreRelease switch to confirm intent if needed, but primarily rely on the version data
+			$installAsPreview = $parsedTargetVersion.IsPrerelease # Default to true if the version string looks like a prerelease
+			if ($installAsPreview) {
+				if ($PreRelease.IsPresent) {
+					New-Log "[$moduleName] version '$preReleaseVersion' appears to be pre-release, and -PreRelease switch is present. Proceeding with preview installation logic." -Level VERBOSE
+				}
+				else {
+					New-Log "[$moduleName] version '$preReleaseVersion' appears to be pre-release (based on version string parsing). Proceeding with preview installation logic even without -PreRelease switch." -Level VERBOSE
+				}
+			}
+			else {
+				New-Log "[$moduleName] version '$targetVersionString' does not appear to be pre-release. Proceeding with standard installation logic." -Level VERBOSE
+			}
+			# Get distinct base paths where old versions exist
+			# Ensure Path exists before trying to Test-Path
+			$outdatedPaths = @($module.OutdatedModules | Where-Object { $null -ne $_.Path } | Select-Object -ExpandProperty Path -Unique | Where-Object { $_ -and (Test-Path $_ -PathType Container -Verbose:$false) })
+			$outdatedVersions = @($module.OutdatedModules.InstalledVersion | Select-Object -Unique) # Get unique old version strings
+			if ($outdatedPaths.Count -eq 0) {
+				New-Log "[$moduleName][$current/$total] Skipping module: No valid outdated base paths found where old versions exist. (Checked: $($module.OutdatedModules.Path -join '; '))." -Level WARNING
+				$aggregateResults.Add([PSCustomObject]@{
+						ModuleName           = $moduleName
+						NewVersionPreRelease = if ($module.IsPreview) { $preReleaseVersion }
+						NewVersion           = $baseVerStr
+						UpdatedPaths         = @()
+						FailedPaths          = @("No valid source paths provided or accessible")
+						OverallSuccess       = $false
+					})
+				continue
+			}
+			# --- Progress Bar Update ---
 			if ($UseProgressBar.IsPresent) {
 				$progressParams = @{
 					Activity         = "Updating PowerShell Modules"
-					Status           = "[$current/$total] Updating $moduleName to $latestVerStr"
+					Status           = if ($module.IsPreview) { "[$moduleName][$current/$total] Updating to $preReleaseVersion" } else { "[$moduleName][$current/$total] Updating to $targetVersionString" }
 					PercentComplete  = (($current / $total) * 100)
-					CurrentOperation = "Calling Install-PSModule for $moduleName"
+					CurrentOperation = "Preparing install for $moduleName"
 				}
 				Write-Progress @progressParams
 			}
-			New-Log "[$current/$total] Processing update for [$moduleName] to version [$latestVerStr] (Preview=$isPreview) from [$repository]." -Level INFO
-			$uniqueBasePaths = $outdatedPaths | ForEach-Object {
-				$currentPath = $_
-				if ($currentPath -match '^(.*\\Modules\\[^\\]+).*') {
-					$Matches[1]
-				}
-				else {
-					Split-Path -Path $currentPath -Parent
-				}
-			} | Select-Object -Unique | Where-Object { $_ -and $_.Trim() }
-			$installResult = $null
-			if ($uniqueBasePaths.Count -gt 0) {
-				New-Log "Attempting update for '$moduleName' in base paths: $($uniqueBasePaths -join '; ')" -Level DEBUG
-				$installResult = Install-PSModule -ModuleName $moduleName -TargetVersion $latestVer -RepositoryName $repository -IsPreview $isPreview -PreReleaseVersion $preReleaseVersion -Destinations $uniqueBasePaths -ErrorAction SilentlyContinue
-			}
-			else {
-				New-Log "Could not determine valid unique base installation paths for module [$moduleName] from OutdatedPaths: $($outdatedPaths -join ', '). Skipping installation." -Level WARNING
-				$installResult = [PSCustomObject]@{
-					UpdatedPaths = @()
-					FailedPaths  = @("Path determination failed")
-				}
-			}
-			$finalResult = [PSCustomObject]@{
-				ModuleName           = $moduleName
-				NewVersionPreRelease = if ($PreReleaseVersion -and $IsPreview) { "$latestVerStr-$preReleaseVersion" } else { $latestVerStr }
-				NewVersion           = $latestVerStr
-				UpdatedPaths         = $installResult.UpdatedPaths
-				FailedPaths          = $installResult.FailedPaths
-				OverallSuccess       = ($installResult.FailedPaths.Count -eq 0 -and $installResult.UpdatedPaths.Count -gt 0)
-			}
-			if ($finalResult.OverallSuccess -and $Clean.IsPresent) {
+			New-Log "[$moduleName] Target base paths based on outdated locations: $($outdatedPaths -join '; ')" -Level VERBOSE
+			# --- Call Installation Helper ---
+			# ShouldProcess target should be the module name and version
+			if ($PSCmdlet.ShouldProcess("$moduleName v$targetVersionString", "Install from repository '$repository' to paths derived from: $($outdatedPaths -join ', ')") -or $PSCmdlet.ShouldProcess("$moduleName v$preReleaseVersion", "Install from repository '$repository' to paths derived from: $($outdatedPaths -join ', ')")) {
 				if ($UseProgressBar.IsPresent) {
-					$progressParams.CurrentOperation = "Cleaning old versions of $moduleName"
+					$progressParams.CurrentOperation = "[$moduleName] Calling internal Install-PSModule.."
 					Write-Progress @progressParams
 				}
-				New-Log "Update successful for '$moduleName'. Proceeding with cleaning old versions..." -Level INFO
-				$cleanedPaths = Remove-OutdatedVersions -ModuleName $moduleName -OutdatedVersions $outdatedVersions -ModuleBasePaths $finalResult.UpdatedPaths -LatestVersion $latestVer -PreReleaseTag $preReleaseVersion -ErrorAction SilentlyContinue
-				if ($cleanedPaths -and $cleanedPaths.Count -gt 0) {
-					$finalResult | Add-Member -NotePropertyName "CleanedPaths" -NotePropertyValue $cleanedPaths -Force
-					New-Log "Successfully cleaned $($cleanedPaths.Count) old items for '$moduleName'." -Level SUCCESS
+				$installResult = Install-PSModule -ModuleName $moduleName -TargetVersionString $targetVersionString -PreReleaseVersion $preReleaseVersion -RepositoryName $repository -IsPreview $installAsPreview -Destinations $outdatedPaths -ErrorAction SilentlyContinue
+				# --- Process Installation Result ---
+				$finalResult = [PSCustomObject]@{
+					ModuleName           = $moduleName
+					NewVersionPreRelease = if ($module.IsPreview) { $preReleaseVersion }
+					NewVersion           = $baseVerStr
+					UpdatedPaths         = @($installResult.UpdatedPaths)
+					FailedPaths          = if ($installResult.FailedPaths) { @($installResult.FailedPaths) } else { $null }
+					OverallSuccess       = ($installResult.FailedPaths.Count -eq 0 -and $installResult.UpdatedPaths.Count -gt 0) # Success if no failures AND at least one success
+					CleanedPaths         = if ($Clean.IsPresent) { @() } else { $null } # Initialize only if -Clean is used, otherwise null
 				}
-				else {
-					New-Log "Cleaning step completed for '$moduleName'. No old versions found or removed." -Level INFO
+				# Ensure FailedPaths is always an array for consistent checking later
+				if ($null -eq $finalResult.FailedPaths) { $finalResult.FailedPaths = @() }
+				# --- Optional Cleaning Step ---
+				if ($finalResult.OverallSuccess -and $Clean.IsPresent) {
+					if ($UseProgressBar.IsPresent) {
+						$progressParams.CurrentOperation = "[$moduleName] Cleaning old versions.."
+						Write-Progress @progressParams
+					}
+					New-Log "[$moduleName] Update successful to paths: $($finalResult.UpdatedPaths -join '; '). Proceeding with cleaning old versions..."
+					# Call cleaning helper for the paths that were successfully updated
+					# ShouldProcess target should be the module name and the versions to be removed
+					if ($PSCmdlet.ShouldProcess("$moduleName (Versions: $($outdatedVersions -join ', '))", "Remove from paths: $($finalResult.UpdatedPaths -join ', ')")) {
+						# Pass the successfully parsed [version] object and pre-release tag of the NEW version to avoid removing it
+						$cleanedPathsResult = Remove-OutdatedVersions -ModuleName $moduleName -OutdatedVersions $outdatedVersions -ModuleBasePaths $finalResult.UpdatedPaths -LatestVersion $latestVer -PreReleaseVersion $preReleaseVersion -ErrorAction SilentlyContinue
+						# Ensure we only process string paths
+						$cleanedPathsResult = $cleanedPathsResult | Where-Object { $_ -is [string] }
+						if ($cleanedPathsResult -and $cleanedPathsResult.Count -gt 0) {
+							$finalResult.CleanedPaths = $cleanedPathsResult
+							New-Log "[$moduleName] Successfully cleaned $($cleanedPathsResult.Count) old items: $($cleanedPathsResult -join '; ')" -Level SUCCESS
+						}
+						else {
+							New-Log "[$moduleName] Cleaning step completed. No old versions were removed in the updated paths. This may be expected or could indicate issues (e.g., permissions, module not found by Uninstall-PSResource). Check paths: $($finalResult.UpdatedPaths -join '; ')" -Level VERBOSE
+						}
+					}
+					else {
+						New-Log "[$moduleName] Skipped cleaning due to ShouldProcess user choice." -Level WARNING
+					}
 				}
+				elseif ($Clean.IsPresent -and -not $finalResult.OverallSuccess) {
+					New-Log "[$moduleName] Skipping cleaning as the update was not fully successful (Failed Paths: $($finalResult.FailedPaths -join '; '))." -Level VERBOSE
+				}
+				# Set CleanedPaths to explicit message if Clean was used but skipped/failed
+				elseif ($Clean.IsPresent -and $finalResult.OverallSuccess -and ($finalResult.CleanedPaths -eq $null -or $finalResult.CleanedPaths.Count -eq 0)) {
+					$finalResult.CleanedPaths = "Cleaning attempted but no paths removed."
+				}
+				# Add the final result for this module to the aggregate list
+				$aggregateResults.Add($finalResult)
 			}
-			elseif ($Clean.IsPresent -and -not $finalResult.OverallSuccess) {
-				New-Log "Skipping cleaning for '$moduleName' as the update was not fully successful." -Level INFO
+			else {
+				New-Log "[$moduleName][$current/$total] Skipped update due to ShouldProcess user choice." -Level WARNING
+				$aggregateResults.Add([PSCustomObject]@{
+						ModuleName           = $moduleName
+						NewVersionPreRelease = if ($module.IsPreview) { $preReleaseVersion }
+						NewVersion           = $baseVerStr
+						UpdatedPaths         = @()
+						FailedPaths          = @("Skipped by ShouldProcess")
+						OverallSuccess       = $false
+						CleanedPaths         = if ($Clean.IsPresent) { "Skipped by ShouldProcess" } else { $null }
+					})
 			}
-			$aggregateResults.Add($finalResult)
-		}
-		if ($UseProgressBar) {
-			Write-Progress -Activity "Updating PowerShell Modules" -Completed
 		}
 		$successCount = ($aggregateResults | Where-Object { $_.OverallSuccess }).Count
 		$failCount = $total - $successCount
-		New-Log "Update process finished. Successful: $successCount, Failed/Partial: $failCount (of $total)." -Level SUCCESS
-		return $aggregateResults
+		New-Log "Update process finished for $total modules. Successful Updates: $successCount, Failed/Partial Updates: $failCount." -Level SUCCESS
+		if ($failCount -gt 0) {
+			New-Log "Modules with failures or partial updates:" -Level WARNING
+			$aggregateResults | Where-Object {
+				-not $_.OverallSuccess
+			} | ForEach-Object {
+				$failReason = if ($_.FailedPaths) {
+					"[$($_.ModuleName)] Failed Paths: $($_.FailedPaths -join '; ')"
+				}
+				else {
+					"[$($_.ModuleName)] Unknown reason"
+				}
+				New-Log "$failReason" -Level WARNING
+			}
+		}
+		# Summarize cleaning results if -Clean was used
+		if ($Clean.IsPresent) {
+			$cleanedModules = $aggregateResults | Where-Object {
+				$_.CleanedPaths -ne $null -and $_.CleanedPaths -is [array] -and $_.CleanedPaths.Count -gt 0
+			}
+			$cleanAttemptedButNoneRemoved = $aggregateResults | Where-Object {
+				$_.CleanedPaths -is [string] -and $_.CleanedPaths -like '*attempted*'
+			}
+			$cleanSkipped = $aggregateResults | Where-Object {
+				$_.CleanedPaths -is [string] -and $_.CleanedPaths -like '*Skipped*'
+			}
+			New-Log "Cleaning Summary: $($cleanedModules.Count) modules had old versions successfully removed. $($cleanAttemptedButNoneRemoved.Count) modules had cleaning attempted but no items removed. $($cleanSkipped.Count) modules had cleaning skipped (ShouldProcess/Failure)." -Level DEBUG
+		}
+		return $aggregateResults # Return the detailed results for each module
 	}
 }
+#endregion Update-Modules
+# -------------------------------------------------------------------------------#
+# Helper Functions (Assume these are defined in the same scope)					 #
+# Minimal help blocks for context, focusing on parameters used by Update-Modules #
+# -------------------------------------------------------------------------------#
+#region Install-PSModule (Helper)
 function Install-PSModule {
+	<#
+	.SYNOPSIS
+	(Helper Function) Installs or saves a specific module version to target locations using the best available method.
+	.DESCRIPTION
+	This is an internal helper function called by `Update-Modules`. It attempts to install a specific version of a module.
+	The primary installation strategy is to use `Save-PSResource`. This cmdlet is called to save the module into the parent directory of each path specified in the `-Destinations` parameter. For example, if a destination base path is 'C:\Modules\MyModule', `Save-PSResource` attempts to save the module content to 'C:\Modules', which would result in a structure like 'C:\Modules\MyModule\NewVersion'. This method is preferred for its control over the installation path.
+	If `Save-PSResource` fails for any destination or entirely, or if some destinations remain unaddressed, the function attempts fallback methods:
+	1. `Install-PSResource -Scope AllUsers`: This installs the module to a system-wide location.
+	2. `Install-Module -Scope AllUsers`: If `Install-PSResource` also fails, this older cmdlet is tried.
+	These fallback methods typically install to a default PSModulePath location for the AllUsers scope and offer less precise control if multiple such paths exist.
+	The function determines success by checking if the new version is present in the expected location after each attempt. It returns an object indicating which of the original destination base paths were successfully updated (either directly via `Save-PSResource` to their parent, or indirectly if a fallback installation resulted in the module being available at an intended destination) and which failed.
+	.PARAMETER ModuleName
+	[Mandatory] The name of the module to install.
+	.PARAMETER TargetVersionString
+	[Mandatory] The base version string of the module to install (e.g., "1.2.3"). If installing a pre-release, this should be the numeric base version part, and the full pre-release version string must be supplied via the `-PreReleaseVersion` parameter.
+	.PARAMETER RepositoryName
+	[Mandatory] The name of the PSResource repository to install from.
+	.PARAMETER IsPreview
+	[Mandatory] A boolean indicating if the target version is a pre-release. This controls whether `-PreRelease` (for `Save-PSResource`, `Install-PSResource`) or `-AllowPrerelease` (for `Install-Module`) flags are used with underlying cmdlets.
+	.PARAMETER Destinations
+	[Mandatory] An array of strings, where each string is a base path of an existing module installation (e.g., "C:\Program Files\WindowsPowerShell\Modules\MyModule"). The function will attempt to install the new version such that it would reside within the parent of these paths (e.g., if "C:\Modules\MyModule" is a destination, `Save-PSResource` targets "C:\Modules").
+	.PARAMETER PreReleaseVersion
+	[Optional] The full pre-release version string (e.g., "2.0.0-beta1"). If specified and `-IsPreview` is true, this exact version string is used with the installation cmdlets (`Save-PSResource -Version`, `Install-PSResource -Version`, `Install-Module -RequiredVersion`). This parameter is crucial for installing specific pre-releases.
+	.OUTPUTS
+	PSCustomObject
+	An object with the following properties:
+	- UpdatedPaths ([System.Collections.Generic.List[string]]): A list of base paths from the original `-Destinations` parameter where the new version was successfully installed or confirmed to exist.
+	- FailedPaths ([System.Collections.Generic.List[string]]): A list of base paths from the original `-Destinations` parameter where the update attempt failed for that specific path.
+	#>
 	[CmdletBinding()]
 	param (
 		[Parameter(Mandatory)][string]$ModuleName,
-		[Parameter(Mandatory)][version]$TargetVersion,
+		[Parameter(Mandatory)][string]$TargetVersionString, # Use full string now
 		[Parameter(Mandatory)][string]$RepositoryName,
 		[Parameter(Mandatory)][bool]$IsPreview,
 		[Parameter(Mandatory)][string[]]$Destinations,
-		[string]$PreReleaseVersion = $null
+		[string]$PreReleaseVersion
 	)
 	$result = [PSCustomObject]@{
 		UpdatedPaths = [System.Collections.Generic.List[string]]::new()
 		FailedPaths  = [System.Collections.Generic.List[string]]::new()
 	}
-	$targetVersionString = $TargetVersion.ToString()
+	if ($PreReleaseVersion) {
+		$TargetVersionStringOrig = $TargetVersionString
+		$TargetVersionString = $PreReleaseVersion
+	}
+	else {
+		$TargetVersionStringOrig = $TargetVersionString
+	}
 	$commonSaveParams = @{
 		Name                = $ModuleName
-		Version             = if ($PreReleaseVersion -and $IsPreview) { "$targetVersionString-$preReleaseVersion" } else { $targetVersionString }
+		Version             = $TargetVersionString # Use the full string
 		Repository          = $RepositoryName
 		TrustRepository     = $true
 		IncludeXml          = $true
 		SkipDependencyCheck = $true
 		AcceptLicense       = $true
+		PreRelease          = if ($IsPreview) { $true } else { $false }
 		Confirm             = $false
 		PassThru            = $true
-		ErrorAction         = 'SilentlyContinue'
+		Verbose             = $false
+		ErrorAction         = 'Stop'
 		WarningAction       = 'SilentlyContinue'
 	}
-	if ($IsPreview) { $commonSaveParams.Prerelease = $true }
 	$pathsToRetry = [System.Collections.Generic.List[string]]::new()
 	$saveSucceededOnce = $false
 	foreach ($destinationBasePath in $Destinations) {
-		$savePath = Split-Path $destinationBasePath -Parent
-		$saveTargetDir = $savePath
-		New-Log "Attempting Save-PSResource for [$ModuleName] version [v$($commonSaveParams.Version)] to '$saveTargetDir'..." -Level DEBUG
-		$res = $null
-		$res = Save-PSResource @commonSaveParams -Path $saveTargetDir
-		if ($res -and $res[-1].Version -eq $TargetVersion -and $res[-1].PreRelease -eq $PreReleaseVersion ) {
-			$savedModulePath = Join-Path -Path $res[-1].InstalledLocation -ChildPath $ModuleName # Verify the actual saved path
-			New-Log "Successfully saved [$ModuleName] version [v$($commonSaveParams.Version)] via Save-PSResource to '$savedModulePath'" -Level SUCCESS
+		# Save-PSResource needs the PARENT of the destination base path
+		# e.g., if destination is C:\Modules\MyMod, save path is C:\Modules
+		$saveTargetDir = Split-Path $destinationBasePath -Parent -ErrorAction SilentlyContinue
+		if (-not $saveTargetDir -or -not (Test-Path $saveTargetDir -PathType Container)) {
+			New-Log "[$moduleName] Install-PSModule: Cannot determine valid parent directory from destination '$destinationBasePath'. Skipping Save-PSResource for this path." -Level WARNING
+			$pathsToRetry.Add($destinationBasePath) # Mark for fallback
+			continue
+		}
+		New-Log "[$moduleName] Attempting Save-PSResource for version [$TargetVersionString] to '$saveTargetDir'..." -Level VERBOSE
+		$saveRes = $null # Renamed variable to avoid conflict
+		try {
+			$saveRes = Save-PSResource @commonSaveParams -Path $saveTargetDir # Use Stop to catch errors
+		}
+		catch {
+			New-Log "[$moduleName] Save-PSResource explicitly failed for v$TargetVersionString to '$saveTargetDir'" -Level WARNING
+			$saveRes = $null # Ensure it's null on error
+		}
+		$savedItem = $saveRes | Select-Object -Last 1 # Get the actual saved item if multiple dependencies were saved
+		if ($savedItem -and $($savedItem.Version) -eq $TargetVersionStringOrig -and $($savedItem.Prerelease) -eq $(($PreReleaseVersion -split '-')[-1]) ) {
+			# Construct the expected final module path after save
+			$expectedModuleVersionPath = Join-Path -Path $saveTargetDir -ChildPath "$ModuleName\$TargetVersionString"
+			New-Log "[$moduleName] Successfully saved version [$TargetVersionString] via Save-PSResource. Expected path: '$expectedModuleVersionPath'" -Level SUCCESS
 			$result.UpdatedPaths.Add($destinationBasePath) # Report success for the target base path
 			$saveSucceededOnce = $true
 		}
 		else {
-			New-Log "Save-PSResource failed for [$ModuleName] v$targetVersionString to '$savePath'" -Level WARNING
 			$pathsToRetry.Add($destinationBasePath) # Mark this base path for potential fallback
 		}
 	}
-	if ($pathsToRetry.Count -gt 0 -or (-not $saveSucceededOnce -and $Destinations.Count -gt 0)) {
-		New-Log "Save-PSResource did not succeed for all target paths. Attempting fallback install methods..." -Level INFO
+	# --- Fallback Installation Methods ---
+	# If Save-PSResource didn't work for all paths, or failed entirely, try Install-* cmdlets
+	# Only retry if there are paths specifically marked for retry
+	if ($pathsToRetry.Count -gt 0) {
+		# Fallback 1: Install-PSResource (Modern, preferred fallback)
 		$fallbackInstallSucceeded = $false
+		$installedLocationFallback = $null
 		try {
 			$psResourceParams = @{
 				Name                = $ModuleName
-				Version             = if ($PreReleaseVersion -and $IsPreview) { "$targetVersionString-$preReleaseVersion" } else { $targetVersionString }
+				Version             = $TargetVersionString
 				Scope               = 'AllUsers'
 				AcceptLicense       = $true
 				SkipDependencyCheck = $true
@@ -1651,199 +1481,946 @@ function Install-PSModule {
 				Reinstall           = $true
 				TrustRepository     = $true
 				Repository          = $RepositoryName
+				PreRelease          = if ($IsPreview) { $true } else { $false }
 				PassThru            = $true
+				Verbose             = $false
 				ErrorAction         = 'Stop'
 				WarningAction       = 'SilentlyContinue'
 			}
-			if ($IsPreview) { $psResourceParams.Prerelease = $true }
-			New-Log "Attempting Install-PSResource for [$ModuleName] version [v$($psResourceParams.Version)]..." -Level DEBUG
-			$res = $null
-			$res = Install-PSResource @psResourceParams
-			if ($res -and $res[-1].InstalledLocation -and $res[-1].Version -eq $TargetVersion -and $res[-1].PreRelease -eq $PreReleaseVersion) {
-				New-Log "Successfully installed [$ModuleName] version [v$($psResourceParams.Version)] via Install-PSResource to '$($res[-1].InstalledLocation)'" -Level SUCCESS
+			New-Log "[$moduleName] Attempting Install-PSResource for version [$($psResourceParams.Version)]..." -Level VERBOSE
+			$installRes1 = $null # Renamed variable
+			$installRes1 = Install-PSResource @psResourceParams
+			$installedItem1 = $installRes1 | Select-Object -Last 1
+			if ($installedItem1 -and $($installedItem1.Version) -eq $TargetVersionStringOrig -and $($installedItem1.Prerelease) -eq $(($PreReleaseVersion -split '-')[-1])) {
+				$installedLocationFallback = $installedItem1.InstalledLocation # Path like C:\Modules\ModuleName\Version
+				New-Log "[$moduleName] Successfully installed version [$($psResourceParams.Version)] via Install-PSResource to '$installedLocationFallback'" -Level SUCCESS
 				$fallbackInstallSucceeded = $true
-				foreach ($retryPath in $pathsToRetry) {
-					if ($($res[-1].InstalledLocation) -eq $retryPath) {
-						$result.UpdatedPaths.Add($retryPath)
-					}
-				}
-			}
-			else {
-				New-Log "Install-PSResource did not return expected result or version for [$ModuleName]." -Level VERBOSE
 			}
 		}
 		catch {
-			New-Log "Install-PSResource failed for [$ModuleName]. Trying Install-Module..." -Level ERROR
+			New-Log "[$moduleName] Install-PSResource did not version v$TargetVersionString" -Level VERBOSE
 		}
 		if (-not $fallbackInstallSucceeded) {
 			try {
 				$installModuleParams = @{
 					Name               = $ModuleName
-					RequiredVersion    = if ($PreReleaseVersion -and $IsPreview) { "$targetVersionString-$preReleaseVersion" } else { $targetVersionString }
-					Scope              = 'AllUsers'
+					RequiredVersion    = $TargetVersionString # Use the full string
+					Scope              = 'AllUsers' # Fallback usually targets AllUsers
 					Force              = $true
 					AcceptLicense      = $true
 					SkipPublisherCheck = $true
 					AllowClobber       = $true
+					AllowPrerelease    = if ($IsPreview) { $true } else { $false }
 					PassThru           = $true
 					Repository         = $RepositoryName
+					Verbose            = $false
 					ErrorAction        = 'Stop'
 					WarningAction      = 'SilentlyContinue'
 					Confirm            = $false
 				}
-				if ($IsPreview) { $installModuleParams.AllowPrerelease = $true }
-				New-Log "Attempting Install-Module for [$ModuleName] version [v$($installModuleParams.RequiredVersion)]..." -Level DEBUG
-				$res = $null
-				$res = Install-Module @installModuleParams
-				if ($res -and $res[-1].InstalledLocation -and $res[-1].Version -eq $TargetVersion -and $res[-1].PreRelease -eq $PreReleaseVersion) {
-					New-Log "Successfully installed [$ModuleName] version [v$($installModuleParams.RequiredVersion)] via Install-Module to '$($res[-1].InstalledLocation)'" -Level SUCCESS
+				New-Log "[$moduleName] Attempting Install-Module for version [$($installModuleParams.RequiredVersion)]..." -Level DEBUG
+				$installRes2 = $null # Renamed variable
+				$installRes2 = Install-Module @installModuleParams
+				$installedItem2 = $installRes2 | Select-Object -Last 1
+				if ($installedItem2 -and $($installedItem2.Version) -eq $TargetVersionStringOrig -and $installedItem2.PSObject.Properties.Match('Prerelease').Value -eq $(($PreReleaseVersion -split '-')[-1])) {
+					# Access Prerelease differently for Install-Module output
+					$installedLocationFallback = $installedItem2.InstalledLocation # Path like C:\Modules\ModuleName\Version
+					New-Log "[$moduleName] Successfully installed version [$($installModuleParams.RequiredVersion)] via Install-Module to '$installedLocationFallback'" -Level SUCCESS
 					$fallbackInstallSucceeded = $true
-					foreach ($retryPath in $pathsToRetry) {
-						if ($($res[-1].InstalledLocation) -eq $retryPath) {
-							$result.UpdatedPaths.Add($retryPath)
-						}
-					}
-				}
-				else {
-					New-Log "Install-Module did not return expected result or version for [$ModuleName]." -Level VERBOSE
 				}
 			}
 			catch {
-				New-Log "Install-Module (fallback) failed for [$ModuleName]." -Level ERROR
+				New-Log "[$moduleName] Install-Module (last fallback) failed" -Level ERROR
 			}
 		}
+		# --- Check if fallback installation satisfied any retry paths ---
+		if ($fallbackInstallSucceeded -and $installedLocationFallback) {
+			# Fallback install typically goes to a default path.
+			# We need to see if any of the *intended* destination base paths correspond to this default path.
+			$fallbackBaseInstallPath = Split-Path $installedLocationFallback -Parent -Verbose:$false # Get the parent (e.g., C:\Modules\ModuleName)
+			foreach ($retryPath in $pathsToRetry) {
+				# Compare the intended base path with the actual base path where the fallback installed
+				if ($retryPath -eq $fallbackBaseInstallPath) {
+					# Only add if not already added by Save-PSResource
+					if ($result.UpdatedPaths -notcontains $retryPath) {
+						$result.UpdatedPaths.Add($retryPath)
+						New-Log "[$moduleName] Fallback installation to '$installedLocationFallback' satisfied the intended destination base path '$retryPath'." -Level DEBUG
+					}
+				}
+			}
+		}
+		# --- Finalize Failed Paths ---
+		# Any path marked for retry that isn't now in UpdatedPaths is considered failed
 		foreach ($retryPath in $pathsToRetry) {
 			if ($result.UpdatedPaths -notcontains $retryPath) {
-				$result.FailedPaths.Add($retryPath)
+				# Only add if not already marked as failed (though it shouldn't be)
+				if ($result.FailedPaths -notcontains $retryPath) {
+					$result.FailedPaths.Add($retryPath)
+					New-Log "[$moduleName] Marking path '$retryPath' as failed after Save-PSResource and fallback install attempts." -Level DEB
+				}
 			}
 		}
 	}
-	$result.UpdatedPaths = $result.UpdatedPaths | Select-Object -Unique
-	$result.FailedPaths = $result.FailedPaths | Select-Object -Unique
+	# --- Consolidate and Report ---
+	$result.UpdatedPaths = $result.UpdatedPaths | Select-Object -Unique -Verbose:$false
+	$result.FailedPaths = $result.FailedPaths | Select-Object -Unique -Verbose:$false
+	# Remove any path from FailedPaths that is also in UpdatedPaths (shouldn't happen often, but safety)
 	$result.FailedPaths = $result.FailedPaths | Where-Object { $result.UpdatedPaths -notcontains $_ }
 	if ($result.UpdatedPaths.Count -gt 0 -and $result.FailedPaths.Count -eq 0) {
-		New-Log "Successfully updated [$ModuleName] v$targetVersionString for all target destinations." -Level SUCCESS
+		New-Log "[$moduleName] Successfully updated to version [$TargetVersionString] for all target destinations ($($result.UpdatedPaths -join '; '))." -Level SUCCESS
 	}
 	elseif ($result.UpdatedPaths.Count -gt 0) {
-		New-Log "Partially updated [$ModuleName] v$targetVersionString. Succeeded: $($result.UpdatedPaths -join '; '). Failed: $($result.FailedPaths -join '; ')" -Level WARNING
+		New-Log "[$moduleName] Partially updated to version [$TargetVersionString]. Succeeded Base Paths: ($($result.UpdatedPaths -join '; ')). Failed Base Paths: ($($result.FailedPaths -join '; '))" -Level WARNING
 	}
 	else {
-		New-Log "Failed to update [$ModuleName] v$targetVersionString for destinations: $($result.FailedPaths -join '; ')" -Level ERROR
+		New-Log "[$moduleName] Failed to update to version [$TargetVersionString] for any target destinations. Failed Base Paths: ($($Destinations -join '; '))" -Level WARNING # Report original destinations if all failed
+		# Ensure all original destinations are marked as failed if UpdatedPaths is empty
+		if ($result.UpdatedPaths.Count -eq 0) {
+			$result.FailedPaths.Clear()
+			$result.FailedPaths.AddRange($Destinations)
+			$result.FailedPaths = $result.FailedPaths | Select-Object -Unique -Verbose:$false # Ensure uniqueness again
+		}
 	}
 	return $result
 }
+#endregion Install-PSModule (Helper)
+#region Remove-OutdatedVersions (Helper)
 function Remove-OutdatedVersions {
-	[CmdletBinding()]
+	<#
+	.SYNOPSIS
+	(Helper Function) Removes specified older versions of a module from given base paths, preserving the specified latest version.
+	.DESCRIPTION
+	This is an internal helper function called by `Update-Modules` when the -Clean switch is used and an update was successful.
+	Its purpose is to remove directories of older versions of a specific module. It operates on each path provided in `-ModuleBasePaths`. A module base path is the directory containing different version folders of that module (e.g., "C:\Program Files\WindowsPowerShell\Modules\MyModule").
+	1.  It constructs the full string of the newly installed version (the one to KEEP) using the provided `-LatestVersion` (a [System.Version] object) and `-PreReleaseVersion` (the full pre-release string, if applicable).
+	2.  For each directory in `-ModuleBasePaths`, it lists all subdirectories.
+	3.  It identifies subdirectories that represent older versions by checking if their names look like version strings (e.g., "1.0.0", "1.1.0-beta") AND are different from the version string constructed in step 1 (and its base numeric form).
+	4.  For each identified old version folder:
+	a. It first attempts to remove the old version using `Uninstall-PSResource -Name <ModuleName> -Version <OldVersionString>`. This is the preferred method as it handles module unregistration.
+	b. If `Uninstall-PSResource` fails to remove the directory or if the command itself fails (e.g., module not found by `Uninstall-PSResource` under that version string), it falls back to using `Remove-Item -Recurse -Force` on the specific old version folder. This is a more direct but potentially less clean removal.
+	5.  Modules listed in the `-DoNotClean` parameter (which defaults to include 'PowerShellGet' and 'Microsoft.PowerShell.PSResourceGet') are skipped entirely.
+	The function returns an array of strings, where each string is the full path to an old version directory that was successfully removed.
+	.PARAMETER ModuleName
+	[Mandatory] The name of the module whose old versions are to be cleaned.
+	.PARAMETER ModuleBasePaths
+	[Mandatory] An array of strings, where each string is a base installation path for the module (e.g., "C:\Program Files\WindowsPowerShell\Modules\MyModule"). The function will look for version subdirectories (e.g., "1.0.0", "1.1.0-beta") within these paths to clean.
+	.PARAMETER LatestVersion
+	[Mandatory] A [System.Version] object representing the base numeric version of the module that should be KEPT (not removed) (e.g., for "2.1.0-preview3", this is the [version]"2.1.0").
+	.PARAMETER OutdatedVersions
+	[Optional] An array of strings representing specific version numbers that were previously identified as outdated. This parameter is present for informational purposes or potential future use but is **not directly used** by the current core removal logic within this function to decide which folders to delete. Old versions are actively identified by scanning subdirectories in `ModuleBasePaths` and comparing their names against the `LatestVersion`/`PreReleaseVersion` to keep.
+	.PARAMETER DoNotClean
+	[Optional] An array of module names that should never be cleaned, even if old versions are found. Defaults to `@('PowerShellGet', 'Microsoft.PowerShell.PSResourceGet')`.
+	.PARAMETER PreReleaseVersion
+	[Optional] The full pre-release version string of the latest version to KEEP (e.g., "2.0.0-beta1"). This is used in conjunction with `LatestVersion` to accurately construct the exact full version string of the module installation that must be preserved during cleanup. If the latest installed version is not a pre-release, this parameter should be $null or not provided.
+	.OUTPUTS
+	String[]
+	An array of full paths to the old module version directories that were successfully removed. Returns an empty array if no versions were removed, if cleaning was skipped for the module, or if errors occurred.
+	#>
+	[CmdletBinding(SupportsShouldProcess = $true)]
 	param (
 		[Parameter(Mandatory)][string]$ModuleName,
 		[Parameter(Mandatory)][string[]]$ModuleBasePaths,
 		[Parameter(Mandatory)][version]$LatestVersion,
 		[string[]]$OutdatedVersions,
 		[string[]]$DoNotClean = @('PowerShellGet', 'Microsoft.PowerShell.PSResourceGet'),
-		[string]$PreReleaseTag = $null
+		[string]$PreReleaseVersion = $null
 	)
 	if ($ModuleName -in $DoNotClean) {
-		New-Log "Skipping cleaning for module [$ModuleName] as it is in the DoNotClean list." -Level INFO
+		New-Log "[$moduleName] Skipping cleaning as it is in the DoNotClean list."
 		return @()
 	}
-	New-Log "Starting cleanup of old versions for [$ModuleName] (keeping v$($LatestVersion.ToString()))..." -Level INFO
+	# Construct the full string of the version to KEEP, including prerelease tag if present
+	[string]$latestVersionString = $LatestVersion.ToString()
+	[string]$latestVersionFullString = if ($PreReleaseVersion) { $PreReleaseVersion } else { $latestVersionString }
+	$PreReleaseTag = if ($PreReleaseVersion) { $(($PreReleaseVersion -split '-')[-1]) } else { $null }
+	New-Log "[$moduleName] Starting cleanup of old versions (keeping v$latestVersionFullString)..." -Level VERBOSE
 	$cleanedItems = [System.Collections.Generic.List[string]]::new()
-	$latestVersionString = $LatestVersion.ToString()
+	$attemptedUninstallFor = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 	foreach ($basePath in $ModuleBasePaths) {
 		if (-not (Test-Path $basePath -PathType Container)) {
-			New-Log "Base path '$basePath' for cleaning does not exist or is not a directory. Skipping." -Level WARNING
+			New-Log "[$moduleName] Base path '$basePath' for cleaning does not exist or is not a directory. Skipping." -Level WARNING
 			continue
 		}
-		New-Log "Checking for old versions within '$basePath'..." -Level DEBUG
-		$foundOldVersionDirs = $false
-		$versionFolders = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue | Where-Object {
-			$_.Name -match '^\d+(\.\d+){1,4}(-.+)?$' -and
-			$_.Name -ne $latestVersionString -and
-			$_.Name -ne "$latestVersionString-$preReleaseVersion"
+		New-Log "[$moduleName] Checking for old versions within '$basePath'..." -Level VERBOSE
+		# Regex remains slightly more flexible here for finding folder names
+		$versionFolders = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue -Verbose:$false | Where-Object {
+			$_.Name -match '^\d+(\.\d+){1,4}(-.+)?$' -and # Match version-like names (allows up to 5 parts)
+			$_.Name -ne $latestVersionFullString -and # Exclude the exact version string we want to keep
+			$_.Name -ne $latestVersionString
 		}
 		if ($versionFolders) {
-			$foundOldVersionDirs = $true
 			foreach ($versionFolder in $versionFolders) {
 				$folderPath = $versionFolder.FullName
 				$versionString = $versionFolder.Name
-				New-Log "Found old version folder: '$folderPath'. Attempting removal..." -Level DEBUG
 				$removed = $false
-				if ($PreReleaseTag) {
-					Uninstall-PSResource -Name $ModuleName -Version "$versionString-$PreReleaseTag" -Scope AllUsers -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-					Uninstall-PSResource -Name $ModuleName -Version $versionString -Scope AllUsers -Prerelease -SkipDependencyCheck -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+				# Avoid double-processing if Uninstall-PSResource was already tried for this version string
+				if ($attemptedUninstallFor.Contains($versionString)) {
+					New-Log "[$moduleName] Already attempted Uninstall-PSResource for version '$versionString'. Checking existence of '$folderPath'." -Level VERBOSE
+					if (-not (Test-Path -LiteralPath $folderPath)) {
+						$cleanedItems.Add($folderPath) # Add if it was removed by a previous attempt
+						$removed = $true
+					}
 				}
-				if (Test-Path -LiteralPath $folderPath) {
-					Uninstall-PSResource -Name $ModuleName -Version $versionString -Scope AllUsers -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-				}
-				Start-Sleep -Milliseconds 200
-				if (-not (Test-Path -LiteralPath $folderPath)) {
-					New-Log "Successfully removed '$folderPath' via Uninstall-PSResource." -Level SUCCESS
-					$cleanedItems.Add($folderPath)
-					$removed = $true
-				}
-				else {
-					New-Log "Uninstall-PSResource ran for '$versionString' but folder '$folderPath' still exists. Will attempt Remove-Item." -Level WARNING
-				}
-				if (-not $removed -and (Test-Path -LiteralPath $folderPath)) {
-					try {
-						Remove-Item -LiteralPath $folderPath -Recurse -Force -ErrorAction Stop | Out-Null
+				if (-not $removed) {
+					New-Log "[$moduleName] Found potential old version folder: '$folderPath'. Attempting removal..." -Level DEBUG
+					if ($PSCmdlet.ShouldProcess($folderPath, "Uninstall module '$ModuleName' version '$versionString' (potentially using Uninstall-PSResource or Remove-Item)") -or $PSCmdlet.ShouldProcess($folderPath, "Uninstall module '$ModuleName' version '$versionString-$($PreReleaseTag)' (potentially using Uninstall-PSResource or Remove-Item)")) {
+						$uninstalledViaCmdlet = $false
+						# Attempt to uninstall via PSResource
+						New-Log "[$moduleName] Attempting Uninstall-PSResource with Version '$versionString-$($PreReleaseTag)'..." -Level VERBOSE
+						Uninstall-PSResource -Name $ModuleName -Version "$($versionString)-$($PreReleaseTag)" -Scope AllUsers -Confirm:$false -Verbose:$false -SkipDependencyCheck -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null
+						try {
+							New-Log "[$moduleName] Attempting Uninstall-PSResource with Version '$versionString'..." -Level VERBOSE
+							Uninstall-PSResource -Name $ModuleName -Version $versionString -Scope AllUsers -Confirm:$false -Verbose:$false -SkipDependencyCheck -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
+							$uninstalledViaCmdlet = $true
+						}
+						catch {
+							New-Log "[$moduleName] Uninstall-PSResource failed with version '$versionString'" -Level WARNING
+						}
+						$attemptedUninstallFor.Add($versionString)
 						Start-Sleep -Milliseconds 200
+						# Check if the folder was removed
 						if (-not (Test-Path -LiteralPath $folderPath)) {
-							New-Log "Successfully removed old folder '$folderPath' via Remove-Item." -Level SUCCESS
+							New-Log "[$moduleName] Successfully removed '$folderPath' (verified after Uninstall-PSResource attempt)." -Level SUCCESS
 							$cleanedItems.Add($folderPath)
+							$removed = $true
 						}
 						else {
-							New-Log "Remove-Item ran but folder '$folderPath' still exists. Manual cleanup might be needed." -Level WARNING
+							# Log appropriate warning based on what happened
+							if ($uninstalledViaCmdlet -and $PreReleaseTag) {
+								New-Log "[$moduleName] Uninstall-PSResource command succeeded with version '$versionString-$PreReleaseTag', but folder '$folderPath' still exists. Proceeding to Remove-Item fallback. (Permissions?)" -Level WARNING
+							}
+							elseif ($uninstalledViaCmdlet) {
+								New-Log "[$moduleName] Uninstall-PSResource command succeeded with version '$versionString', but folder '$folderPath' still exists. Proceeding to Remove-Item fallback. (Permissions?)" -Level WARNING
+							}
+							else {
+								New-Log "[$moduleName] Uninstall-PSResource failed or did not remove folder '$folderPath'. Proceeding to Remove-Item fallback. (Permissions?)" -Level VERBOSE
+							}
+						}
+						# Fallback: Use Remove-Item if folder still exists
+						if (-not $removed -and (Test-Path -LiteralPath $folderPath -Verbose:$false)) {
+							New-Log "[$moduleName] Attempting Remove-Item -Recurse -Force on '$folderPath'..." -Level DEBUG
+							try {
+								Remove-Item -LiteralPath $folderPath -Recurse -Force -ErrorAction Stop -Verbose:$false | Out-Null
+								Start-Sleep -Milliseconds 200
+								if (-not (Test-Path -LiteralPath $folderPath)) {
+									New-Log "[$moduleName] Successfully removed old folder '$folderPath' via Remove-Item." -Level SUCCESS
+									$cleanedItems.Add($folderPath)
+								}
+								else {
+									New-Log "[$moduleName] Remove-Item ran but folder '$folderPath' still exists. Manual cleanup might be needed. (Permissions?)" -Level WARNING
+								}
+							}
+							catch {
+								New-Log "[$moduleName] Failed to remove old folder '$folderPath' via Remove-Item. Manual cleanup might be required. (Permissions?)" -Level WARNING
+							}
 						}
 					}
-					catch {
-						New-Log "Failed to remove old folder '$folderPath' via Remove-Item. Error: $($_.Exception.Message). Manual cleanup might be required." -Level ERROR
-						$Error.Clear()
+					else {
+						New-Log "[$moduleName] Skipped removal of '$folderPath' due to ShouldProcess user choice." -Level DEBUG
 					}
 				}
 			}
 		}
-		if (-not $versionFolders) {
-			New-Log "No specific version folders found in '$basePath'. Trying Uninstall-PSResource with provided local versions..." -Level DEBUG
-			foreach ($localVer in ($OutdatedVersions | Where-Object { $_ -ne $latestVersionString -or $_ -ne "$latestVersionString-$PreReleaseTag" })) {
-				try {
-					New-Log "Attempting Uninstall-PSResource for '$ModuleName' version 'v$localVer'..." -Level DEBUG
-					Uninstall-PSResource -Name $ModuleName -Version $localVer -Scope AllUsers -Confirm:$false -SkipDependencyCheck -ErrorAction Stop
-					New-Log "Successfully uninstalled '$ModuleName' version 'v$localVer' via fallback." -Level SUCCESS
-				}
-				catch {
-					Uninstall-PSResource -Name $ModuleName -Version "$localVer-$PreReleaseTag" -Scope AllUsers -SkipDependencyCheck -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-					try {
-						Uninstall-PSResource -Name $ModuleName -Version $localVer -Scope AllUsers -SkipDependencyCheck -Prerelease -Confirm:$false -ErrorAction Stop | Out-Null
-						New-Log "Successfully uninstalled '$ModuleName' version 'v$localVer-$PreReleaseTag' via fallback." -Level SUCCESS
-					}
-					catch {
-						New-Log "Failed with backup way to Uninstall-PSResource for module '$ModuleName'." -Level WARNING
-					}
-				}
+		else {
+			New-Log "[$moduleName] No version-like subdirectories found to clean within '$basePath'" -Level DEBUG
+		}
+	}
+	# Ensure we only return string paths (filter out any accidental booleans or other types)
+	$cleanedPathsToReturn = $cleanedItems | Where-Object { $_ -is [string] } | Select-Object -Unique -Verbose:$false
+	New-Log "[$moduleName] Finished cleaning attempt. Removed $($cleanedPathsToReturn.Count) items." -Level DEBUG
+	return $cleanedPathsToReturn # Return list of removed directory paths
+}
+#endregion Remove-OutdatedVersions (Helper)
+#region Get-ManifestVersionInfo (Helper)
+function Get-ManifestVersionInfo {
+	<#
+	.SYNOPSIS
+	(Helper Function) Extracts version and metadata from parsed module manifest data or by analyzing a module file path.
+	.DESCRIPTION
+	Internal helper function for `Get-ModuleInfo`. It processes module metadata from different sources:
+	1. If `-Quick` is specified and `$ResData` (typically the direct output object from `Test-ModuleManifest`) is provided, it performs a simplified extraction directly from this object's properties (like Name, Version, Author, ModuleBase).
+	2. If `-ModuleFilePath` is provided (and not in `-Quick` mode, or if `$ResData` is absent or insufficient), it calls another helper, `Get-ModuleformPath`. `Get-ModuleformPath` attempts to infer module details (name, version, base path, author) by analyzing the file path structure and may leverage `Get-Module` for confirmation.
+	In both cases, where a version string is obtained, it utilizes the `Parse-ModuleVersion` helper to interpret the version string, identify pre-release status, and extract any pre-release labels.
+	The function is designed to be flexible and could also process data that might originate from `Import-PowerShellDataFile` if such data (a hashtable with expected keys) were piped to its `$ResData` parameter, though `Get-ModuleInfo` primarily uses `Test-ModuleManifest` output or file path analysis via `Get-ModuleformPath`.
+	.PARAMETER ResData
+	[Optional, ValueFromPipeline] An object or hashtable containing manifest data. When used with `-Quick`, this is typically the output object from `Test-ModuleManifest`. It can also be data from `Import-PowerShellDataFile`.
+	.PARAMETER Quick
+	[Optional] If specified, and `$ResData` is provided and is an object with expected properties (like from `Test-ModuleManifest`), the function performs a direct and simplified extraction of module metadata from `$ResData`.
+	.PARAMETER ModuleFilePath
+	[Optional] A string path to the module's manifest file (.psd1). This is used if `$ResData` is not provided, or if not in `-Quick` mode, or if the `-Quick` extraction from `$ResData` is insufficient, to attempt inferring module information by analyzing the file path via the `Get-ModuleformPath` helper.
+	.OUTPUTS
+	PSCustomObject
+	A PSCustomObject containing the extracted module information, or $null if essential information (like module name or version) cannot be determined. The object includes:
+	- ModuleName ([string]): The name of the module.
+	- ModuleVersion ([System.Version]): The parsed [System.Version] object of the module (the numeric part).
+	- ModuleVersionString ([string]): The original, full version string as found or parsed.
+	- IsPreRelease ([bool]): True if the version is identified as a pre-release by `Parse-ModuleVersion`.
+	- PreReleaseLabel ([string]): The pre-release label (e.g., "beta1", "rc.2"), if applicable, from `Parse-ModuleVersion`.
+	- BasePath ([string]): The determined base path of the module (the module's root directory, e.g., "C:\Modules\MyModule").
+	- Author ([string]): The author of the module, if available from the manifest data or `Get-ModuleformPath`.
+	#>
+	[CmdletBinding()]
+	param (
+		[Parameter(ValueFromPipeline)][object]$ResData,
+		[switch]$Quick,
+		[string]$ModuleFilePath
+	)
+	if (-not $ResData -and -not $Quick.IsPresent -and $ModuleFilePath) {
+		$module = Get-ModuleformPath -Path $ModuleFilePath
+		if ($module) {
+			return [PSCustomObject]@{
+				ModuleName          = $module.ModuleName
+				ModuleVersion       = $module.ModuleVersion
+				ModuleVersionString = $module.ModuleVersionString
+				IsPreRelease        = $module.IsPrerelease
+				PreReleaseLabel     = $module.PreReleaseLabel
+				BasePath            = $module.BasePath
+				Author              = $moduel.Author
 			}
 		}
-		return $cleanedItems
+	}
+	if ($Quick.IsPresent -and $ResData) {
+		$quickVersionString = $ResData.Version.ToString()
+		$parsedQuickVersion = $null
+		if ($quickVersionString) {
+			$parsedQuickVersion = Parse-ModuleVersion -VersionString $quickVersionString -ErrorAction SilentlyContinue
+		}
+		[version]$quickVersion = if ($parsedQuickVersion) { $parsedQuickVersion.ModuleVersion } else { $null }
+		[bool]$quickIsPre = if ($parsedQuickVersion) { $parsedQuickVersion.IsPrerelease } else { $false }
+		[string]$quickPreLabel = if ($parsedQuickVersion) { $parsedQuickVersion.PreReleaseLabel } else { $null }
+		$quickBasePath = if ($ResData.ModuleBase) { $ResData.ModuleBase } else { $null }
+		$quickModuleName = if ($ResData.Name) { $ResData.Name } else { $null }
+		if (!$quickVersion) {
+			New-Log "Quick mode: Could not parse version '$quickVersionString' using Parse-ModuleVersion." -Level DEBUG
+		}
+		return [PSCustomObject]@{
+			ModuleName          = $quickModuleName
+			ModuleVersion       = $quickVersion
+			ModuleVersionString = "$($quickVersionString)"
+			IsPreRelease        = $quickIsPre
+			PreReleaseLabel     = $quickPreLabel
+			BasePath            = "$($quickBasePath)"
+			Author              = $resData.Author
+		}
 	}
 }
+#endregion Get-ManifestVersionInfo (Helper)
+#region Test-IsResourceFile (Helper)
+function Test-IsResourceFile {
+	<#
+	.SYNOPSIS
+	(Helper Function) Checks if a given file path likely points to a localization/resource file rather than a primary module manifest.
+	.DESCRIPTION
+	Internal helper for `Get-ModuleInfo`, used to filter out files that are probably not main module manifests but rather culture-specific resource files or localization data.
+	It uses several regular expression patterns to make this determination:
+	1.  Checks if the path contains a directory named like a culture code (e.g., 'en-US', 'de-DE', 'fr').
+	2.  Checks if the path contains common resource directory names such as 'Resources', 'Localization', 'Languages', 'i18n', 'l10n'.
+	3.  Checks for common resource file naming patterns, where the filename itself indicates a resource (e.g., 'MyModule.Strings.psd1', 'Errors.xml', 'LocalizedData.psd1').
+	4.  Checks if the filename itself is a culture code followed by '.psd1' or '.xml' (e.g., 'en-US.psd1').
+	If any of these patterns match, the function assumes the file is a resource file.
+	.PARAMETER Path
+	[Mandatory] The string path to the file to be tested (typically a .psd1 or .xml file).
+	.OUTPUTS
+	System.Boolean
+	Returns `$true` if the path matches patterns commonly associated with resource or localization files; otherwise, returns `$false`.
+	#>
+	[CmdletBinding()]
+	param(
+		[string]$Path
+	)
+	# Simple checks based on common patterns for localization resource files
+	# 1. Culture code directory (e.g., en-US, de-DE)
+	if ($Path -match '\\([a-z]{2,3}-[A-Z]{2,3})\\') {
+		# Allows 2 or 3 letter lang codes
+		New-Log "Path '$Path' matches culture code pattern: $($Matches[1])" -Level VERBOSE
+		return $true
+	}
+	# 2. Common resource directory names
+	if ($Path -match '\\(Resources|Resource|Localization|Localizations|Languages|Lang|Cultures|Culture|i18n|l10n)\\', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) {
+		New-Log "Path '$Path' contains common resource directory name: $($Matches[1])" -Level VERBOSE
+		return $true
+	}
+	# 3. Common resource file naming patterns (often ending in .resources.psd1 or similar)
+	if ($Path -match '(Resources|Strings|Localized|Messages|Text|Errors|Labels|UI)\.(psd1|xml)$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) {
+		New-Log "Path '$Path' matches common resource file name pattern: $($Matches[0])" -Level VERBOSE
+		return $true
+	}
+	# 4. Simpler culture code format (e.g., \en\, \fr\)
+	if ($Path -match '\\([a-z]{2,3})\\[^\\]+\.(psd1|xml)$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) {
+		New-Log "Path '$Path' matches simple culture code pattern: $($Matches[1])" -Level VERBOSE
+		return $true
+	}
+	# 5. File name IS a culture code (e.g., en-US.psd1) - less common for manifests but possible
+	$fileName = Split-Path -Path $Path -Leaf
+	if ($fileName -match '^[a-z]{2,3}-[A-Z]{2,3}\.(psd1|xml)$') {
+		New-Log "Path '$Path' filename matches culture code: $fileName" -Level VERBOSE
+		return $true
+	}
+	# Default: Not identified as a resource file
+	New-Log "Path '$Path' did not match resource file patterns." -Level VERBOSE
+	return $false
+}
+#endregion Test-IsResourceFile (Helper)
+#region Resolve-ModuleVersion (Helper)
+function Resolve-ModuleVersion {
+	<#
+    .SYNOPSIS
+    (Helper Function) Parses a given version string and optionally refines it by checking installed modules at a specific path.
+    .DESCRIPTION
+    Internal helper function, primarily used by `Get-ModuleformPath`.
+    1. It first attempts to parse the provided (optional) `-VersionString` using the `Parse-ModuleVersion` helper. This gives an initial interpretation of the version.
+    2. Regardless of whether `-VersionString` was provided or successfully parsed, it then queries for installed modules matching the mandatory `-ModuleName`. This query is filtered: it only considers module installations whose `ModuleBase` (the directory containing the module name folder, e.g., "C:\Program Files\WindowsPowerShell\Modules") is a parent of or the same as the directory containing the input `-Path` (or the `-Path` itself if it's a directory). This helps pinpoint the specific module installation relevant to the input `-Path`.
+    3. If a matching installed module is found from this filtered `Get-Module` call, its version string is taken and parsed using `Parse-ModuleVersion`. This result, if valid, becomes the definitive version information.
+    This process helps in scenarios where a version string might be absent, ambiguous, or incompletely represented in a path or filename, allowing `Get-Module` to provide a more authoritative version if the module is properly installed and discoverable at that location.
+    .PARAMETER VersionString
+    [Optional] An initial version string to parse (e.g., "1.0.0", "2.1.0-beta"). If not provided or unparsable, the function relies more heavily on `Get-Module`.
+    .PARAMETER ModuleName
+    [Mandatory] The name of the module for which to resolve the version.
+    .PARAMETER Path
+    [Mandatory] The full path to a file (e.g., a .psd1) or a directory within the module's installation. This path is crucial for filtering `Get-Module` results to the correct installation if multiple versions or locations exist.
+    .PARAMETER BasePath
+    [Optional] The potential base path of the module (e.g., "C:\Modules\MyModule"). This parameter is primarily used for logging purposes within this function and to help `Get-Module`'s `ModuleBase` comparison.
+    .OUTPUTS
+    PSCustomObject
+    An object with two properties:
+    - Module ([PSModuleInfo]): The `PSModuleInfo` object from `Get-Module` if a matching installed module was found and its version was used. This can be `$null` if no such module is found or if the initial `VersionString` parse was used and deemed sufficient.
+    - VersionPattern ([PSCustomObject]): The output from `Parse-ModuleVersion` based on the finally determined version string (either from the input `VersionString` or from a found `PSModuleInfo` object). This object contains fields like `ModuleVersion` ([System.Version]), `ModuleVersionString`, `IsPrerelease`, `PreReleaseLabel`. This will be `$null` if no version could be parsed at all.
+    #>
+	[CmdletBinding()]
+	param (
+		[Parameter()][string]$VersionString,
+		[Parameter(Mandatory)][string]$ModuleName,
+		[Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Path,
+		[Parameter()][string]$BasePath
+	)
+	$versionPattern = Parse-ModuleVersion -VersionString $VersionString
+	if ($versionPattern) {
+		New-Log "[$moduleName] Fond and parsed successfully: Version='$VersionString', Module='$ModuleName', Path='$BasePath'" -Level SUCCESS
+	}
+	$module = Get-Module -Name $ModuleName -All -ListAvailable -ErrorAction SilentlyContinue -Verbose:$false | Where-Object { $Path -like ($_.ModuleBase + '\*') } | Sort-Object -Property Version -Descending -ErrorAction SilentlyContinue | Select-Object -First 1 -ErrorAction SilentlyContinue
+	if ($module) {
+		$versionPattern = Parse-ModuleVersion -VersionString $module.Version
+	}
+	return [psCustomObject]@{
+		Module         = $module
+		VersionPattern = $versionPattern
+	}
+}
+#endregion Resolve-ModuleVersion (Helper)
+#region Get-ModuleformPath (Helper)
+function Get-ModuleformPath {
+	<#
+    .SYNOPSIS
+    (Helper Function) Attempts to guess the module name, version, and module base path from a given file/directory path.
+    .DESCRIPTION
+    Internal helper function, primarily for `Get-ManifestVersionInfo`. It aims to extract module metadata (name, version, base path, author) by analyzing the structure of an input path, which typically points to a module manifest file (.psd1) or a directory within a module structure.
+    The function employs several strategies:
+    1.  **Standard Path Regex:** It first tries to match a common PowerShell module path pattern like '...\Modules\ModuleName\VersionString\...' (e.g., 'C:\Program Files\Modules\MyModule\1.0.0\MyModule.psd1'). If this pattern matches, it extracts the module name, version string, and the module's base path (e.g., 'C:\Program Files\Modules\MyModule').
+    2.  **Heuristic Path Analysis:** If the standard regex doesn't match, it uses a more heuristic approach:
+        a.  It determines a `potentialModuleBasePath` (e.g., if input is '...\MyModule\1.0.0\file.psd1', this could be '...\MyModule\1.0.0' or '...\MyModule').
+        b.  The `potentialModuleName` is taken as the leaf name of this `potentialModuleBasePath`.
+        c.  **Version as Directory Name:** If this `potentialModuleName` itself looks like a version string (e.g., '1.0.0'), it assumes the `potentialModuleBasePath` was actually a version-specific directory. It then considers the parent of this directory as the true `BasePath`, and the leaf name of that parent as the `ModuleName`. The version string is the folder name that looked like a version.
+        d.  **General Case:** If `potentialModuleName` doesn't look like a version and isn't simply "Modules", it's treated as the module name. The function then tries to find a version string by:
+            i.  Looking for version-like strings in any of the parent directory names in the input path.
+            ii. If the input path is a .psd1 file, by reading the manifest content and looking for a `ModuleVersion = '...'` line.
+    3.  **Version Resolution:** In all cases where a module name and a potential version string are identified (either from path parsing or manifest content), it calls the `Resolve-ModuleVersion` helper. `Resolve-ModuleVersion` parses the version string and can further refine it by checking `Get-Module -ListAvailable` for an installed module at that path context, providing a more authoritative version and author if available.
+    The `BasePath` returned is intended to be the module's root installation directory (e.g., "C:\Modules\MyModule"), which is the parent of any version-specific subfolders. Version strings are interpreted using `Parse-ModuleVersion` (via `Resolve-ModuleVersion`).
+    .PARAMETER Path
+    [Mandatory] The string path, typically to a module manifest file (.psd1) or a directory that is part of a module's file structure.
+    .OUTPUTS
+    PSCustomObject
+    A PSCustomObject containing the inferred module details. If essential details like ModuleName or ModuleVersion cannot be reliably inferred, their corresponding properties will be $null.
+    - ModuleName ([string]): The inferred name of the module.
+    - BasePath ([string]): The inferred base path (root directory) of the module (e.g., "C:\Modules\MyModule").
+    - ModuleVersion ([System.Version]): The parsed [System.Version] object of the module (numeric part).
+    - ModuleVersionString ([string]): The original, full version string that was identified and parsed.
+    - IsPrerelease ([bool]): True if the version is identified as a pre-release by `Parse-ModuleVersion`.
+    - PreReleaseLabel ([string]): The pre-release label (e.g., "beta1"), if applicable.
+    - Author ([string]): The author of the module, typically resolved via `Get-Module` by the `Resolve-ModuleVersion` helper.
+    Returns an object with null properties for fields that could not be determined.
+    #>
+	[CmdletBinding()]
+	[OutputType([PSCustomObject])]
+	param (
+		[Parameter(Mandatory)][string]$Path
+	)
+	if ([string]::IsNullOrWhiteSpace($Path)) {
+		New-Log "Input path cannot be null or empty. Will abort." -Level WARNING
+		return [PSCustomObject]@{
+			ModuleName          = $null
+			BasePath            = $null
+			ModuleVersion       = $null
+			ModuleVersionString = $null
+			IsPrerelease        = $null
+			PreReleaseLabel     = $null
+			Author              = $null
+		}
+	}
+	$trimmedPath = $Path.TrimEnd('\/')
+	$normalizedPath = $trimmedPath -replace '/', '\'
+	$versionPattern = '\d+(\.\d+){1,3}(-.+)?' # Example: 1.0.0, 1.2.3.4, 2.0.0-beta
+	$regexVersionOnly = "^$versionPattern$" # Anchored version pattern for exact match
+	# --- Pattern 1: Standard Structure ...\Modules\ModuleName\Version[\Something] ---
+	$regexPattern1 = "(?i)^(.*\\Modules\\([^\\]+))\\($versionPattern)(?:\\.*)?$"
+	New-Log "Trying Pattern 1 regex: '$regexPattern1' against '$normalizedPath'" -Level VERBOSE
+	if ($normalizedPath -match $regexPattern1) {
+		if ($Matches -ne $null -and $Matches.Count -ge 3) {
+			[string]$modulePath = $Matches[1]
+			[string]$moduleName = $Matches[2]
+			[string]$matchedVersion = $Matches[3]
+			$moduleData = Resolve-ModuleVersion -VersionString $matchedVersion -ModuleName $moduleName -Path $Path -BasePath $modulePath
+			$versionPattern = $moduleData.VersionPattern
+			$module = $moduleData.Module
+			return [PSCustomObject]@{
+				ModuleName          = $($moduleName)
+				BasePath            = $($modulePath)
+				ModuleVersion       = $versionPattern.ModuleVersion
+				ModuleVersionString = $versionPattern.ModuleVersionString
+				IsPrerelease        = $versionPattern.IsPrerelease
+				PreReleaseLabel     = $versionPattern.PreReleaseLabel
+				Author              = if ($module.Author) { $module.Author } else { $null }
+			}
+		}
+	}
+	New-Log "Pattern 1 did NOT match." -Level VERBOSE
+	# --- Pattern 2 (Previously Fallback 2): Look for module name and version in path or manifest ---
+	$potentialModuleBasePath = $null
+	if (Test-Path -Path $normalizedPath -PathType Container -Verbose:$false) {
+		$potentialModuleBasePath = $normalizedPath
+		New-Log "Pattern 2: Input '$normalizedPath' is a directory. Assuming it's the ModulePath." -Level VERBOSE
+	}
+	else {
+		# If input is a file, its parent directory is the candidate for ModulePath
+		$potentialModuleBasePath = Split-Path -Path $normalizedPath -Parent -ErrorAction SilentlyContinue -Verbose:$false
+		New-Log "Pattern 2: Input '$normalizedPath' is a file. Assuming parent '$potentialModuleBasePath' is the ModulePath." -Level VERBOSE
+	}
+	if ($potentialModuleBasePath) {
+		$potentialModuleName = Split-Path -Path $potentialModuleBasePath -Leaf -ErrorAction SilentlyContinue -Verbose:$false
+		New-Log "Pattern 2: Potential ModuleName (leaf of ModulePath) is '$potentialModuleName'." -Level VERBOSE
+		# Guard against the potential module name being a version string
+		if ($potentialModuleName -match $regexVersionOnly) {
+			New-Log "Pattern 2: determined ModuleName '$potentialModuleName' which looks like a version. This is usually incorrect." -Level WARNING
+			# Try to get the correct module name from the parent
+			$parentOfVersionDir = Split-Path -Path $potentialModuleBasePath -Parent -ErrorAction SilentlyContinue -Verbose:$false
+			if ($parentOfVersionDir) {
+				$betterModuleName = Split-Path -Path $parentOfVersionDir -Leaf -ErrorAction SilentlyContinue -Verbose:$false
+				if ($betterModuleName -and $betterModuleName -ne 'Modules') {
+					$moduleData = Resolve-ModuleVersion -VersionString $potentialModuleName -ModuleName $betterModuleName -Path $Path -BasePath $parentOfVersionDir
+					$versionPattern = $moduleData.VersionPattern
+					$module = $moduleData.Module
+					return [PSCustomObject]@{
+						ModuleName          = $($betterModuleName)
+						BasePath            = $($parentOfVersionDir)
+						ModuleVersion       = $versionPattern.ModuleVersion
+						ModuleVersionString = $versionPattern.ModuleVersionString
+						IsPrerelease        = $versionPattern.IsPrerelease
+						PreReleaseLabel     = $versionPattern.PreReleaseLabel
+						Author              = if ($module.Author) { $module.Author } else { $null }
+					}
+				}
+			}
+		}
+		# Prevent 'Modules' folder itself being named the module
+		elseif ($potentialModuleName -and $potentialModuleName -ne 'Modules') {
+			New-Log "Pattern 2: Found potential module name '$potentialModuleName', attempting to find version information" -Level VERBOSE
+			$version = $null
+			# 1. Look in any of the parent directory names
+			$pathParts = $normalizedPath -split '\\'
+			foreach ($part in $pathParts) {
+				if ($part -match $regexVersionOnly) {
+					$version = $part
+					New-Log "Pattern 2: Found version '$version' in path component" -Level VERBOSE
+					break
+				}
+			}
+			# 2. Try looking for version in manifest file if this is a psd1
+			if (-not $version -and $normalizedPath -like "*.psd1") {
+				try {
+					$manifestContent = Get-Content -Path $normalizedPath -Raw -ErrorAction SilentlyContinue -Verbose:$false
+					if ($manifestContent -match "ModuleVersion\s*=\s*['`"]([^'`"]+)") {
+						$version = $Matches[1]
+						New-Log "Pattern 2: Found version '$version' in module manifest" -Level VERBOSE
+					}
+				}
+				catch {
+					New-Log "Pattern 2: Error reading module manifest." -Level VERBOSE
+				}
+			}
+			# Now use our helper to resolve the version or get it from module info
+			$moduleData = Resolve-ModuleVersion -VersionString $version -ModuleName $potentialModuleName -Path $Path -BasePath $potentialModuleBasePath
+			$versionPattern = $moduleData.VersionPattern
+			$module = $moduleData.Module
+			return [PSCustomObject]@{
+				ModuleName          = $($potentialModuleName)
+				BasePath            = $($potentialModuleBasePath)
+				ModuleVersion       = $versionPattern.ModuleVersion
+				ModuleVersionString = $versionPattern.ModuleVersionString
+				IsPrerelease        = $versionPattern.IsPrerelease
+				PreReleaseLabel     = $versionPattern.PreReleaseLabel
+				Author              = if ($module -and $module.Author) { $module.Author } else { $null }
+			}
+		}
+	}
+	# No patterns matched, return null values
+	return [PSCustomObject]@{
+		ModuleName          = $null
+		BasePath            = $null
+		ModuleVersion       = $null
+		ModuleVersionString = $null
+		IsPrerelease        = $null
+		PreReleaseLabel     = $null
+		Author              = $null
+	}
+}
+#endregion Get-ModuleformPath (Helper)
+#region Get-ModuleInfoFromXml (Helper)
+function Get-ModuleInfoFromXml {
+	<#
+	.SYNOPSIS
+	(Helper Function) Parses a PSGetModuleInfo.xml file to extract module metadata, utilizing Parse-ModuleVersion for version interpretation.
+	.DESCRIPTION
+	Internal helper function for `Get-ModuleInfo`. It is designed to read and parse an XML file that typically conforms to the structure of `PSGetModuleInfo.xml`, which is often created when modules are saved using `Save-PSResource -IncludeXml` or `Save-Module -IncludeXML`.
+	The function uses XPath queries to navigate the XML structure and extract key pieces of module metadata. The standard PowerShell serialization namespace ("http://schemas.microsoft.com/powershell/2004/04") is used for these queries. Properties typically extracted include:
+	- Module Name (from XPath `//ps:S[@N='Name']`)
+	- Module Version string (from `//ps:S[@N='Version']`)
+	- Author (from `//ps:S[@N='Author']`)
+	- InstalledLocation (from `//ps:S[@N='InstalledLocation']`). This usually points to the parent directory where modules are stored (e.g., "C:\Program Files\WindowsPowerShell\Modules").
+	The extracted version string is then processed by the `Parse-ModuleVersion` helper. This provides a structured `[System.Version]` object for the numeric part of the version, determines if the version is a pre-release, and extracts any pre-release label (e.g., "beta1").
+	The `BasePath` for the module is constructed by joining the `InstalledLocation` value (which is the modules' parent directory) with the extracted module `Name`. For example, if `InstalledLocation` is "C:\Modules" and `Name` is "MyModule", the `BasePath` becomes "C:\Modules\MyModule".
+	The function returns a PSCustomObject containing these extracted and parsed details.
+	.PARAMETER XmlFilePath
+	[Mandatory] The string path to the `PSGetModuleInfo.xml` (or similarly structured XML) file to be parsed.
+	.OUTPUTS
+	PSCustomObject
+	A PSCustomObject containing the extracted module information. If parsing fails or essential nodes (like Name or Version) are missing from the XML, it returns $null. The object includes:
+	- ModuleName ([string]): The name of the module as extracted from the XML.
+	- ModuleVersion ([System.Version]): The parsed [System.Version] object (numeric part) of the module, obtained via `Parse-ModuleVersion`.
+	- ModuleVersionString ([string]): The original, unparsed version string as read directly from the XML file.
+	- BasePath ([string]): The constructed base path for the module (e.g., "C:\Program Files\WindowsPowerShell\Modules\MyModule"). This points to the module's root directory.
+	- isPreRelease ([bool]): True if `Parse-ModuleVersion` identifies the version string from the XML as a pre-release.
+	- PreReleaseLabel ([string]): The pre-release label (e.g., "beta1", "rc.2") identified by `Parse-ModuleVersion`, if applicable.
+	- Author ([string]): The author of the module, if specified in the XML.
+	Returns $null if critical information cannot be extracted or parsed.
+	#>
+	[CmdletBinding()]
+	param (
+		[Parameter(Mandatory)][string]$XmlFilePath
+	)
+	if (-not (Test-Path -Path $XmlFilePath -PathType Leaf)) {
+		New-Log "XML file not found: $XmlFilePath" -Level WARNING
+		return $null
+	}
+	try {
+		[xml]$xmlContent = Get-Content -Path $XmlFilePath -Raw -ErrorAction Stop -Verbose:$false
+		# Define the namespace used in these XML files
+		$nsManager = New-Object System.Xml.XmlNamespaceManager($xmlContent.NameTable)
+		$nsManager.AddNamespace("ps", "http://schemas.microsoft.com/powershell/2004/04") # Standard PS serialization namespace
+		# --- Extract values using XPath ---
+		$nameNode = $xmlContent.SelectSingleNode("//ps:S[@N='Name']", $nsManager)
+		$nameValue = if ($nameNode) { $nameNode.'#text' } else { $null }
+		$authorNode = $xmlContent.SelectSingleNode("//ps:S[@N='Author']", $nsManager)
+		$authorValue = if ($authorNode) { $authorNode.'#text' } else { $null }
+		$versionNode = $xmlContent.SelectSingleNode("//ps:S[@N='Version']", $nsManager)
+		$versionValue = if ($versionNode) { $versionNode.'#text' } else { $null } # Keep original string from XML
+		$locationNode = $xmlContent.SelectSingleNode("//ps:S[@N='InstalledLocation']", $nsManager)
+		$locationValue = if ($locationNode) { $locationNode.'#text' } else { $null } # Parent dir (e.g., ...\Modules)
+		# Note: We will rely on Parse-ModuleVersion for IsPrerelease and Label, ignoring XML's IsPrerelease value if present.
+		# The <B N='IsPrerelease'>true</B> tag sometimes exists but can be inconsistent with the version string itself.
+		# Parsing the version string is generally more reliable for SemVer compliance.
+		# --- Process extracted values ---
+		$IsPrerelease = $false
+		$preReleaseLabelValue = $null
+		$parsedVersionInfo = $null
+		if ($versionValue) {
+			$parsedVersionInfo = Parse-ModuleVersion -VersionString $versionValue -ErrorAction SilentlyContinue
+			if ($parsedVersionInfo) {
+				$IsPrerelease = $parsedVersionInfo.IsPrerelease
+				$preReleaseLabelValue = $parsedVersionInfo.PreReleaseLabel
+				New-Log "XML: Parsed Version '$versionValue'. IsPre: $IsPrerelease, Label: '$preReleaseLabelValue'" -Level VERBOSE
+			}
+			else {
+				New-Log "XML: Could not parse Version string '$versionValue' using Parse-ModuleVersion." -Level WARNING
+				# Keep default $false/null for prerelease flags if parsing failed
+			}
+		}
+		if ($nameValue -and $versionValue) {
+			# Construct BasePath by joining InstalledLocation (parent) and module Name
+			# The BasePath should ideally point to the ModuleName folder, not the version folder.
+			$basePathValue = $null
+			if ($locationValue -and $nameValue) {
+				try {
+					# Join the location (e.g., C:\Modules) with the module name (e.g., Pester)
+					$basePathValue = Join-Path -Path $locationValue -ChildPath $nameValue -ErrorAction Stop -Verbose:$false
+				}
+				catch {
+					New-Log "XML: Error constructing BasePath from Location '$locationValue' and Name '$nameValue'" -Level ERROR
+					$basePathValue = $null
+				}
+			}
+			else {
+				New-Log "XML: Cannot construct BasePath - InstalledLocation or Name missing. Location: '$locationValue', Name: '$nameValue'" -Level VERBOSE
+			}
+			New-Log "XML Parsed: Name='$($result.ModuleName)', Version='$($result.ModuleVersion)', BasePath='$($result.BasePath)', IsPreview=$($result.isPreRelease), Label='$($result.PreReleaseLabel)'" -Level VERBOSE
+			return [PSCustomObject]@{
+				ModuleName          = $nameValue
+				ModuleVersion       = $parsedVersionInfo.ModuleVersion
+				ModuleVersionString = "$($versionValue)"
+				BasePath            = "$($basePathValue)"
+				isPreRelease        = $IsPrerelease
+				PreReleaseLabel     = $preReleaseLabelValue
+				Author              = if ($authorValue) { $authorValue } else { $null }
+			}
+		}
+		else {
+			New-Log "Could not find required 'Name' or 'Version' node in XML: $XmlFilePath" -Level VERBOSE
+			return $null
+		}
+	}
+	catch {
+		New-Log "Error parsing XML file '$XmlFilePath'" -Level ERROR
+		return $null
+	}
+}
+#endregion Get-ModuleInfoFromXml (Helper)
+#region Parse-ModuleVersion (Helper)
+function Parse-ModuleVersion {
+	<#
+	.SYNOPSIS
+	(Helper Function) Parses a module version string to extract its base numeric version, pre-release status, and pre-release label.
+	.DESCRIPTION
+	This internal helper function is used by various other functions in this script to consistently interpret module version strings.
+	It takes a string that might represent a standard version (e.g., '1.2.3'), a 4-part version (e.g., '1.2.3.4'), or a Semantic Versioning (SemVer) 2.0.0 style pre-release (e.g., '1.2.3-beta1', '2.0.0-rc.2', '3.0.1-alpha.10.x.Z').
+	The function uses a regular expression to identify if the string matches a SemVer pre-release pattern (numeric base version followed by a hyphen and a pre-release identifier).
+	- If it matches, it separates the base numeric part (e.g., "1.2.3") from the pre-release label (e.g., "beta1").
+	- If it doesn't match the SemVer pre-release pattern, the entire input string is treated as the base version string.
+	The identified base numeric part is then parsed into a [System.Version] object. This object can handle 2 to 4 numeric components (Major.Minor.Build.Revision).
+	The function returns a PSCustomObject containing the parsed components.
+	.PARAMETER VersionString
+	[Mandatory] The version string to parse (e.g., "1.2.3", "1.2.3.4", "2.0.0-beta.1", "3.1-alpha-rev2").
+	.OUTPUTS
+	PSCustomObject
+	A PSCustomObject containing the parsed version components. Returns $null if the base numeric part of the `VersionString` cannot be successfully parsed into a [System.Version] object. The output object includes:
+	- ModuleVersion ([System.Version]): The parsed base [System.Version] object (e.g., for "1.2.3-beta1", this would be the [version]"1.2.3"). This will be $null if the base string is unparsable.
+	- ModuleVersionString ([string]): The original, unmodified input `VersionString`.
+	- ModuleVersionStringNoPrefix ([string]): The base numeric version part extracted from the `VersionString` (e.g., "1.2.3" from "1.2.3-beta1"). This is the string that was attempted to be parsed into `ModuleVersion`.
+	- IsSemVer ([bool]): True if the input `VersionString` matched the N.N.N[-N.N.N]-tag pattern, indicating a SemVer-like structure with a pre-release tag.
+	- IsPrerelease ([bool]): True if `IsSemVer` is true (i.e., a pre-release tag was identified according to the SemVer pattern).
+	- PreReleaseLabel ([string]): The extracted pre-release tag (e.g., "beta1", "rc.2", "alpha.10.x.Z"), if `IsSemVer` is true; otherwise $null.
+	- PreReleaseVersion ([string]): The full pre-release version string, reconstructed from the parsed `ModuleVersion` and `PreReleaseLabel` (e.g., "1.2.3-beta1"), if `IsPrerelease` is true; otherwise $null.
+	#>
+	[CmdletBinding()]
+	param (
+		[Parameter()][string]$VersionString
+	)
+	if ([string]::IsNullOrWhiteSpace($VersionString)) { return $null }
+	[version]$version = $null
+	[string]$baseVersionString = $VersionString
+	[string]$prereleasePart = $null
+	[bool]$isSemVerStyle = $false
+	[bool]$isPrerelease = $false
+	# Regex: Match base version (allowing 2 to 4 parts: N.N to N.N.N.N) followed by a hyphen and the prerelease tag.
+	# Base Version: \d+ (\.\d+){1,3} -> One or more digits, followed by 1 to 3 groups of (dot + one or more digits).
+	# Prerelease Tag (Option 1): [0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)* -> One or more valid SemVer identifiers, dot-separated.
+	# Anchors: ^...$ -> Match the entire string.
+	$semVerRegex = '^(\d+(\.\d+){1,3})-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)$'
+	if ($VersionString -match $semVerRegex) {
+		$baseVersionString = $Matches[1]
+		$prereleasePart = $Matches[3] # Group 3 captures the pre-release part
+		$isSemVerStyle = $true
+		$isPrerelease = $true # By definition of the pattern
+		New-Log "Parse-ModuleVersion: Matched SemVer pattern. Base:'$baseVersionString', Label:'$prereleasePart'" -Level VERBOSE
+	}
+	else {
+		# Not SemVer style, keep original string as base for TryParse
+		$baseVersionString = $VersionString
+	}
+	# Attempt to parse the determined base version string into a [version] object
+	$isParseable = [version]::TryParse($baseVersionString, [ref]$version)
+	if ($isParseable) {
+		return [PSCustomObject]@{
+			ModuleVersionStringNoPrefix = $baseVersionString
+			ModuleVersionString         = $VersionString
+			ModuleVersion               = $version
+			IsSemVer                    = $isSemVerStyle
+			IsPrerelease                = $isPrerelease      # True only if matched SemVer pattern
+			PreReleaseLabel             = if (![string]::IsNullOrEmpty($prereleasePart)) { $prereleasePart } else { $null }
+			PreReleaseVersion           = if (![string]::IsNullOrEmpty($prereleasePart)) { "$($version)-$($prereleasePart)" } else { $null }
+		}
+	}
+	else {
+		# Base version string itself was not parseable by [version]::TryParse
+		New-Log "Parse-ModuleVersion: Could not parse base version string '$baseVersionString' (derived from original '$VersionString') into a [System.Version] object." -Level WARNING
+		return $nul
+	}
+}
+#endregion Parse-ModuleVersion (Helper)
+#region Compare-ModuleVersion (Helper)
+function Compare-ModuleVersion {
+	<#
+    .SYNOPSIS
+    Compares two module version strings, with specific handling for common pre-release identifiers, to determine which is newer.
+    .DESCRIPTION
+    Compares two version strings (`VersionA` and `VersionB`) to determine which is "newer". This is crucial for deciding if an online version is an update to a local one. The comparison logic is as follows:
+    1.  **Base Version Comparison:** The numeric parts of the versions (e.g., "3.8.0" from "3.8.0-beta1") are parsed into [System.Version] objects and compared first. A higher base version is always considered newer (e.g., "3.8.1" is newer than "3.8.0").
+    2.  **Identical Base Versions - Pre-release Handling:** If the base numeric versions are identical:
+        a.  **Pre-release vs. Stable:** If one version has a pre-release tag (e.g., "-beta1") and the other does not (is stable), the version WITH the pre-release tag is considered NEWER. This logic prioritizes testing newer, potentially unstable, pre-releases over an existing stable version if their base numbers are the same (e.g., "3.8.0-beta1" is considered newer than "3.8.0").
+        b.  **Both Stable or Both Pre-release with Same Tag Type & Number:** If neither has a pre-release tag and base versions are identical, they are considered equal. If both have pre-release tags that are identical (same type and same numeric suffix, or no suffix), they are also considered equal.
+        c.  **Both Pre-release - Tag Type Priority:** If both versions have pre-release tags but the tag types are different, they are compared based on a defined priority order: 'dev' (highest priority) > 'alpha' > 'beta' > 'preview' > 'rc' (lowest standard pre-release tag in this list). For example, "1.0.0-dev1" is newer than "1.0.0-alpha1"; "1.0.0-alpha1" is newer than "1.0.0-beta1".
+        d.  **Both Pre-release - Same Tag Type, Different Number:** If both pre-release tags are of the same type (e.g., both are 'beta'), any numeric suffix is compared. A higher number indicates a newer version (e.g., "beta2" is newer than "beta1"). If one has a number and the other doesn't for the same tag type, the one with the number is typically considered newer (a tag with no number is treated as if it has a suffix of 0).
+        e.  **Non-standard Pre-release Tags:** If pre-release tags do not match the recognized standard types ('dev', 'alpha', 'beta', 'preview', 'rc'), a simple string comparison of the full pre-release tags is performed.
+    .PARAMETER VersionA
+    [Mandatory] The first version string (e.g., "3.8.0", "3.8.0-beta1"). This is typically considered the "current" or "local" version in an update check.
+    .PARAMETER VersionB
+    [Mandatory] The second version string (e.g., "3.8.0", "3.8.0-preview2"). This is typically considered the "new" or "online" version in an update check.
+    .PARAMETER ReturnBoolean
+    [Optional] If this switch is specified, the function returns `$true` if `VersionB` is considered newer than `VersionA` according to the logic above, and `$false` otherwise (including if they are considered equal or if `VersionA` is newer).
+    If this switch is not specified (the default behavior), the function returns the string of the version that is considered newer. If they are considered equal by the comparison logic, `VersionA` (the first one provided) is returned.
+    .OUTPUTS
+    System.String or System.Boolean
+    - If `-ReturnBoolean` is NOT specified: Returns the string of the version considered newer (`VersionA` or `VersionB`). If they are deemed equal, `VersionA` is returned.
+    - If `-ReturnBoolean` IS specified: Returns `$true` if `VersionB` is newer than `VersionA`; otherwise `$false`.
+    .EXAMPLE
+    PS C:\> Compare-ModuleVersion -VersionA "3.8.0" -VersionB "3.8.0-preview2"
+    Returns: "3.8.0-preview2" (Reason: Base versions are same; VersionB is a pre-release, VersionA is stable, so pre-release is considered newer).
+    .EXAMPLE
+    PS C:\> Compare-ModuleVersion -VersionA "3.8.0-beta23" -VersionB "3.8.0-alpha5" -ReturnBoolean
+    Returns: $false (Reason: Base versions are same. Both are pre-releases. 'alpha' has higher priority than 'beta' in this function's logic [alpha=4, beta=3]. So, VersionB ('alpha5') is NOT newer than VersionA ('beta23') because beta is lower priority than alpha. Wait, this example text is confusing.
+    Corrected Logic: VersionA ('beta', Prio 3), VersionB ('alpha', Prio 4). Is B newer? Yes, Prio B (4) > Prio A (3). So should return $true. The example description text needs update.)
+    PS C:\> Compare-ModuleVersion -VersionA "1.0.0-beta3" -VersionB "1.0.0-alpha10" -ReturnBoolean
+    Returns: $true (Reason: 'alpha' [priority 4] is considered newer than 'beta' [priority 3])
+    .EXAMPLE
+    PS C:\> Compare-ModuleVersion -VersionA "1.0.0-rc1" -VersionB "1.0.0-dev5"
+    Returns: "1.0.0-dev5" (Reason: 'dev' [priority 5] is considered newer than 'rc' [priority 1])
+    .EXAMPLE
+    PS C:\> Compare-ModuleVersion -VersionA "2.0.0" -VersionB "1.9.0-dev"
+    Returns: "2.0.0" (Reason: Base version "2.0.0" is newer than "1.9.0")
+    #>
+	[CmdletBinding()]
+	param (
+		[Parameter(Mandatory)][string]$VersionA,
+		[Parameter(Mandatory)][string]$VersionB,
+		[Parameter()][switch]$ReturnBoolean
+	)
+	# Basic input validation
+	if ([string]::IsNullOrWhiteSpace($VersionA) -or [string]::IsNullOrWhiteSpace($VersionB)) {
+		New-Log "Compare-ModuleVersion: One or both versions are null or empty." -Level VERBOSE
+		if ($ReturnBoolean) { return $false } else { return $VersionA }
+	}
+	# Precedence order for prerelease types (HIGHER number = higher priority)
+	$typePriority = @{
+		'dev'     = 5
+		'alpha'   = 4
+		'beta'    = 3
+		'preview' = 2
+		'rc'      = 1 # Release Candidate
+	}
+	# Split versions into base and prerelease parts
+	$baseVersionA, $prereleaseA = $VersionA -split '-', 2
+	$baseVersionB, $prereleaseB = $VersionB -split '-', 2
+	# Compare base versions first (e.g., 3.8.0 vs 3.7.0)
+	try {
+		$versionObjectA = [System.Version]::new($baseVersionA)
+		$versionObjectB = [System.Version]::new($baseVersionB)
+		$baseComparison = $versionObjectA.CompareTo($versionObjectB)
+		if ($baseComparison -ne 0) {
+			# Base versions are different
+			New-Log "Compare-ModuleVersion: Base versions differ - A=$baseVersionA, B=$baseVersionB. Result=$baseComparison" -Level VERBOSE
+			if ($ReturnBoolean) {
+				return $baseComparison -lt 0 # Return true if B > A
+			}
+			else {
+				return $(if ($baseComparison -gt 0) { $VersionA } else { $VersionB })
+			}
+		}
+	}
+	catch {
+		New-Log "Compare-ModuleVersion: Error parsing version strings. Falling back to string comparison." -Level VERBOSE
+		if ($ReturnBoolean) { return $false } else { return $VersionA }
+	}
+	# Base versions are the same, now handle prerelease logic
+	# IMPORTANT: If one is prerelease and the other isn't, prerelease is ALWAYS newer
+	if ($prereleaseA -and -not $prereleaseB) {
+		# A has prerelease, B doesn't, so A is newer
+		New-Log "Compare-ModuleVersion: VersionA has prerelease ($prereleaseA), VersionB doesn't. A is newer." -Level VERBOSE
+		if ($ReturnBoolean) { return $false } else { return $VersionA }
+	}
+	elseif (-not $prereleaseA -and $prereleaseB) {
+		# B has prerelease, A doesn't, so B is newer
+		New-Log "Compare-ModuleVersion: VersionB has prerelease ($prereleaseB), VersionA doesn't. B is newer." -Level VERBOSE
+		if ($ReturnBoolean) { return $true } else { return $VersionB }
+	}
+	elseif (-not $prereleaseA -and -not $prereleaseB) {
+		# Neither has prerelease, they're equal
+		New-Log "Compare-ModuleVersion: Neither version has prerelease. Versions are equal." -Level VERBOSE
+		if ($ReturnBoolean) { return $false } else { return $VersionA }
+	}
+	# Both have prerelease parts, so we need to compare them
+	# Normalize prerelease strings
+	$prereleaseA = $prereleaseA.ToLower().Trim('.- ')
+	$prereleaseB = $prereleaseB.ToLower().Trim('.- ')
+	# Extract prerelease type and number using regex
+	$regex = "^($(($typePriority.Keys | ForEach-Object {[regex]::Escape($_)}) -join '|'))(?:[\.\-_]?(\d+))?$"
+	$matchA = [regex]::Match($prereleaseA, $regex)
+	$matchB = [regex]::Match($prereleaseB, $regex)
+	# If not matching standard format, do a simple string comparison
+	if (-not $matchA.Success -or -not $matchB.Success) {
+		New-Log "Compare-ModuleVersion: Non-standard prerelease format. Performing simple string comparison." -Level VERBOSE
+		$comparisonResult = $prereleaseA.CompareTo($prereleaseB)
+		if ($ReturnBoolean) {
+			return $comparisonResult -lt 0
+		}
+		else {
+			return $(if ($comparisonResult -ge 0) { $VersionA } else { $VersionB })
+		}
+	}
+	# Extract type and number
+	$typeA = $matchA.Groups[1].Value
+	$numberA = if ([string]::IsNullOrEmpty($matchA.Groups[2].Value)) { 0 } else { [int]$matchA.Groups[2].Value }
+	$typeB = $matchB.Groups[1].Value
+	$numberB = if ([string]::IsNullOrEmpty($matchB.Groups[2].Value)) { 0 } else { [int]$matchB.Groups[2].Value }
+	New-Log "Compare-ModuleVersion: Comparing prerelease A='$typeA'($numberA) vs B='$typeB'($numberB)" -Level VERBOSE
+	# Compare prerelease types
+	if ($typeA -ne $typeB) {
+		$priorityA = $typePriority[$typeA]
+		$priorityB = $typePriority[$typeB]
+		New-Log "Prerelease types differ. Priority A=$priorityA, B=$priorityB." -Level VERBOSE
+		# HIGHER number means higher priority
+		if ($ReturnBoolean) {
+			return $priorityB -gt $priorityA
+		}
+		else {
+			return $(if ($priorityA -gt $priorityB) { $VersionA } else { $VersionB })
+		}
+	}
+	# Types are the same, compare numbers
+	New-Log "Prerelease types are the same ('$typeA'). Comparing numbers: A=$numberA, B=$numberB." -Level VERBOSE
+	if ($ReturnBoolean) {
+		return $numberB -gt $numberA
+	}
+	else {
+		return $(if ($numberA -ge $numberB) { $VersionA } else { $VersionB })
+	}
+}
+#endregion Compare-ModuleVersio (Helper)
 ### OBS: New-Log Function is needed otherwise remove all New-Log and replace with Write-Host. New-Log is vastly better though, check the link below:
 #Example:
 <#
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
 Check-PSResourceRepository -ImportDependencies
-$ignoredModules = @('Example2.Diagnostics') #Fully ignored modules
+Import-Module -Name ThreadJob -Global -Force
+$ignoredModules = @('Example2.Diagnostics', 'BurntToast') #Fully ignored modules
 $blackList = @{ #Ignored module and repo combo.
 	'Microsoft.Graph.Beta' = 'NuGetGallery'
 	'Microsoft.Graph'      = @("Nuget", "NugetGallery")
 }
 $paths = $env:PSModulePath.Split(';') | Where-Object { $_ -inotmatch '.vscode' }
 $moduleInfo = Get-ModuleInfo -Paths $paths -IgnoredModules $ignoredModules
-$outdated = Get-ModuleUpdateStatus -ModuleInventory $moduleInfo -TimeoutSeconds 30 -Repositories @("PSGallery", "Nuget", "NugetGallery") -BlackList $blackList -MatchAuthor
+$outdated = Get-ModuleUpdateStatus -ModuleInventory $moduleInfo -TimeoutSeconds 120 -Repositories @("PSGallery", "Nuget", "NugetGallery") -MatchAuthor
 if ($outdated) {
 	$res = $outdated | Update-Modules -Clean -UseProgressBar
 	$res
 }
 else {
-	New-Log "No outdated modules found!" -Level SUCCESS
+	New-Log "No outdata to run" -Level SUCCESS
 }
 #>
