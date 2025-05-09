@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 function New-Log {
 	<#
     .SYNOPSIS
@@ -51,7 +50,7 @@ function New-Log {
         Defaults to 'yyyy-MM-dd HH:mm:ss.fff'.
     .PARAMETER ErrorObject
         Allows explicitly passing an ErrorRecord object (e.g., from a catch block: $_ | New-Log -Level ERROR -ErrorObject $_).
-        This takes precedence over automatic error lookup. Defaults to trying to capture $_ from the caller's scope if available.
+        This takes precedence over automatic error lookup. Defaults to $null, allowing the function to attempt automatic capture.
     .EXAMPLE
 		$ht = @{ Name = "John"; Age = 30; Role = "Developer" }
 		$ht | New-Log -Level INFO
@@ -114,8 +113,8 @@ function New-Log {
 		[2025-04-23 05:37:32.118][ERROR Detail] Code: 1 / 0
     .NOTES
         Author: Harze2k
-        Date:   2025-05-25 (Updated)
-        Version: 3.5 (Added default clearing of the $Error variable.)
+        Date:   2025-05-09 (Updated)
+        Version: 3.6 (Optimized ErrorObject default and Write-PrefixedLinesToConsole helper)
         - Console writer now respects and preserves the original indentation from formatters (like ConvertTo-Json, Format-Table) instead of applying a secondary, fixed indent.
         - Added 'Type is [typename]' line for complex objects in console TEXT output.
         - Internal Write-Verbose messages only show if -Verbose is passed *directly* to New-Log.
@@ -123,6 +122,8 @@ function New-Log {
         - Uses UTF8 encoding without BOM for log files.
         - Added enhanced output to make function more testable
         - Fixed log rotation to properly track rotated files
+        - Changed ErrorObject parameter default to $null for more predictable behavior.
+        - Removed unused IsPSCore parameter from Write-PrefixedLinesToConsole helper.
     #>
 	[CmdletBinding()]
 	param(
@@ -140,7 +141,7 @@ function New-Log {
 		[Parameter(Position = 11)][switch]$NoAutoGroup,
 		[Parameter(Position = 12)][switch]$NoErrorLookup,
 		[Parameter(Position = 13)][string]$DateFormat = 'yyyy-MM-dd HH:mm:ss.fff',
-		[Parameter()]$ErrorObject = $(if ($global:error.Count -gt 0) { $global:error[0] } else {$null })
+		[Parameter()]$ErrorObject = $null
 	)
 	Begin {
 		#region Initialize Variables
@@ -160,9 +161,9 @@ function New-Log {
 		$script:IsPipelineInput = $MyInvocation.ExpectingInput
 		$script:PipelineItemCounter = 0
 		$script:InitialErrorCount = $Error.Count
-        $script:LogRecordCount = 0    # Added to track log entries for testing
-        $script:RotatedFiles = @()    # Added to track rotated files for testing
-        $script:LogRotated = $false   # Added flag to indicate if rotation occurred
+		$script:LogRecordCount = 0    # Added to track log entries for testing
+		$script:RotatedFiles = @()    # Added to track rotated files for testing
+		$script:LogRotated = $false   # Added flag to indicate if rotation occurred
 		#endregion Initialize Variables
 		if ($script:ShowInternalVerbose) { Write-Verbose "Internal verbose logging enabled for this call." }
 		#region Setup Console Encoding
@@ -195,12 +196,12 @@ function New-Log {
 		#region Helper Functions
 		#region Console Output Functions
 		function Write-PrefixedLinesToConsole {
+			# MODIFIED: Removed IsPSCore parameter
 			[CmdletBinding()]
 			param(
 				[string]$Prefix,
-				[string]$Content, # Allow empty
-				$Color,
-				[bool]$IsPSCore
+				[string]$Content,
+				$Color
 			)
 			$lines = $Content -split "\r?\n"
 			$nonEmptyLines = $lines | Where-Object { $_ -ne '' }
@@ -212,8 +213,8 @@ function New-Log {
 				# Construct the output string before calling Write-Host
 				$outputLine = $Prefix + " " + $line
 				Write-Host $outputLine -ForegroundColor $Color
-                # Track that console output was generated (for testing)
-                $script:LogRecordCount++
+				# Track that console output was generated (for testing)
+				$script:LogRecordCount++
 			}
 		}
 		#endregion Console Output Functions
@@ -224,7 +225,7 @@ function New-Log {
 				$CurrentItem,
 				[bool]$NoErrorLookupParameter
 			)
-			if ($ErrorObject -ne $null -and $ErrorObject -is [System.Management.Automation.ErrorRecord]) {
+			if ($null -ne $ErrorObject -and $ErrorObject -is [System.Management.Automation.ErrorRecord]) {
 				return $ErrorObject
 			}
 			if ($CurrentItem -is [System.Management.Automation.ErrorRecord]) {
@@ -234,7 +235,7 @@ function New-Log {
 				return $null
 			}
 			$scopedErrorVar = try { Get-Variable -Name '_' -Scope 1 -ErrorAction Stop } catch { $null }
-			if ($scopedErrorVar -ne $null -and $scopedErrorVar.Value -is [System.Management.Automation.ErrorRecord]) {
+			if ($null -ne $scopedErrorVar -and $scopedErrorVar.Value -is [System.Management.Automation.ErrorRecord]) {
 				return $scopedErrorVar.Value
 			}
 			if ($Error.Count -gt $script:InitialErrorCount) {
@@ -276,9 +277,7 @@ function New-Log {
 					$valueString = try {
 						($Item[$key] | Out-String -Width 120).Trim()
 					}
-					catch {
-						"<Error Formatting Value>"
-					}
+					catch {	}
 					$outputLines.Add("$key : $valueString")
 				}
 				$keyValueString = $outputLines -join "`r`n"
@@ -340,15 +339,15 @@ function New-Log {
 						if ($script:ShowInternalVerbose) {
 							Write-Verbose "Log rotation. Rotating '$LogFilePath' to '$backupPath'"
 						}
-                        # Perform the rotation
+						# Perform the rotation
 						Copy-Item -Path $LogFilePath -Destination $backupPath -Force -ErrorAction SilentlyContinue
 						Remove-Item -Path $LogFilePath -Force -ErrorAction SilentlyContinue
-                        # Track rotated files for testing
-                        $script:RotatedFiles += $backupPath
-                        $script:LogRotated = $true
-                        if ($script:ShowInternalVerbose) {
-                            Write-Verbose "Rotated file count: $($script:RotatedFiles.Count)"
-                        }
+						# Track rotated files for testing
+						$script:RotatedFiles += $backupPath
+						$script:LogRotated = $true
+						if ($script:ShowInternalVerbose) {
+							Write-Verbose "Rotated file count: $($script:RotatedFiles.Count)"
+						}
 						$fileExists = $false
 					}
 				}
@@ -366,11 +365,11 @@ function New-Log {
 					$contentToAppend = if ($fileExists -and (Get-Item $LogFilePath).Length -gt 0) { "`r`n" + $ContentToWrite } else { $ContentToWrite }
 					[System.IO.File]::AppendAllText($LogFilePath, $contentToAppend, $script:Utf8NoBomEncoding)
 				}
-                # For testing purposes, track the write
-                $script:LogRecordCount++
+				# For testing purposes, track the write
+				$script:LogRecordCount++
 			}
 			catch {
-				Write-Warning "Failed write log '$LogFilePath': $($_.Exception.Message)"
+				Write-Error "Failed write log '$LogFilePath': $($_.Exception.Message)"
 			}
 		}
 		#endregion File Operations Functions
@@ -462,7 +461,7 @@ function New-Log {
 						}
 					}
 					$logEntryBase | Add-Member -MemberType NoteProperty -Name ErrorDetails -Value $errorDetails -Force
-					if (($originalItem -eq $null -or $originalItem -eq "") -or $originalItem -is [System.Management.Automation.ErrorRecord]) {
+					if (($null -eq $originalItem -or $originalItem -eq "") -or $originalItem -is [System.Management.Automation.ErrorRecord]) {
 						$effectiveItem = $errorDetails.Exception
 					}
 				}
@@ -486,35 +485,25 @@ function New-Log {
 				$ansiReset = "`e[0m"
 				$consolePrefix = if ($CurrentIsPSCore) {
 					"`e[34m[$timestamp]$ansiReset`e[${colorCode}m[$CurrentLevel]$ansiReset"
-				} else {
+				}
+				else {
 					"[$timestamp][$CurrentLevel]"
 				}
-				Write-PrefixedLinesToConsole -Prefix $consolePrefix `
-					-Content $formattedTextMessage `
-					-Color $psColor `
-					-IsPSCore $CurrentIsPSCore
+				Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content $formattedTextMessage -Color $psColor
 				# Additional error details for console
 				if ($CurrentLevel -eq 'ERROR' -and $errorDetails) {
 					$errorPrefix = if ($CurrentIsPSCore) {
 						"`e[34m[$timestamp]$ansiReset`e[${colorCode}m[ERROR Detail]$ansiReset"
-					} else {
+					}
+					else {
 						"[$timestamp][ERROR Detail]"
 					}
-					Write-PrefixedLinesToConsole -Prefix $errorPrefix `
-						-Content "Exception: $($errorDetails.Exception)" `
-						-Color $psColor `
-						-IsPSCore $CurrentIsPSCore
+					Write-PrefixedLinesToConsole -Prefix $errorPrefix -Content "Exception: $($errorDetails.Exception)" -Color $psColor
 					if ($errorDetails.CallerInfo) {
-						Write-PrefixedLinesToConsole -Prefix $errorPrefix `
-							-Content "Caller: $($errorDetails.CallerInfo)" `
-							-Color $psColor `
-							-IsPSCore $CurrentIsPSCore
+						Write-PrefixedLinesToConsole -Prefix $errorPrefix -Content "Caller: $($errorDetails.CallerInfo)" -Color $psColor
 					}
 					if ($errorDetails.FailedCode -ne 'N/A') {
-						Write-PrefixedLinesToConsole -Prefix $errorPrefix `
-							-Content "Code: $($errorDetails.FailedCode)" `
-							-Color $psColor `
-							-IsPSCore $CurrentIsPSCore
+						Write-PrefixedLinesToConsole -Prefix $errorPrefix -Content "Code: $($errorDetails.FailedCode)" -Color $psColor
 					}
 				}
 			}
@@ -543,7 +532,8 @@ function New-Log {
 						}
 					}
 				}
-				else { # TEXT format
+				else {
+					# TEXT format
 					$fileContent = "[$timestamp][$CurrentLevel]"
 					if (-not [string]::IsNullOrEmpty($formattedTextMessage)) {
 						$fileContent += " $formattedTextMessage"
@@ -565,19 +555,19 @@ function New-Log {
 			}
 			# Return object if requested
 			if ($CurrentReturnObject) {
-                # Add UsedANSI property for testing
-                if (-not $CurrentNoConsole -and $CurrentIsPSCore) {
-                    $logEntryBase | Add-Member -MemberType NoteProperty -Name UsedANSI -Value $true -Force
-                }
+				# Add UsedANSI property for testing
+				if (-not $CurrentNoConsole -and $CurrentIsPSCore) {
+					$logEntryBase | Add-Member -MemberType NoteProperty -Name UsedANSI -Value $true -Force
+				}
 				$logEntryBase.Message = $originalItem
-                # Add properties for testing
-                $logEntryBase | Add-Member -MemberType NoteProperty -Name LogRecordCount -Value $script:LogRecordCount -Force
-                # Always add the RotatedFiles property if log rotation is enabled
-                if ($LogRotationSizeMB -gt 0) {
-                    if ($script:LogRotated -or $script:RotatedFiles.Count -gt 0) {
-                        $logEntryBase | Add-Member -MemberType NoteProperty -Name RotatedFiles -Value $script:RotatedFiles -Force
-                    }
-                }
+				# Add properties for testing
+				$logEntryBase | Add-Member -MemberType NoteProperty -Name LogRecordCount -Value $script:LogRecordCount -Force
+				# Always add the RotatedFiles property if log rotation is enabled
+				if ($LogRotationSizeMB -gt 0) {
+					if ($script:LogRotated -or $script:RotatedFiles.Count -gt 0) {
+						$logEntryBase | Add-Member -MemberType NoteProperty -Name RotatedFiles -Value $script:RotatedFiles -Force
+					}
+				}
 				return $logEntryBase
 			}
 			else {
@@ -627,7 +617,8 @@ function New-Log {
 						}
 					}
 				}
-				else { # TEXT format
+				else {
+					# TEXT format
 					if ($script:ShowInternalVerbose) {
 						Write-Verbose "Logging $objectCount grouped items as TEXT table."
 					}
@@ -651,18 +642,13 @@ function New-Log {
 				$ansiReset = "`e[0m"
 				$consolePrefix = if ($CurrentIsPSCore) {
 					"`e[34m[$timestamp]$ansiReset`e[${colorCode}m[$CurrentLevel]$ansiReset"
-				} else {
+				}
+				else {
 					"[$timestamp][$CurrentLevel]"
 				}
-				Write-PrefixedLinesToConsole -Prefix $consolePrefix `
-					-Content "Displaying $objectCount grouped items:" `
-					-Color $psColor `
-					-IsPSCore $CurrentIsPSCore
+				Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content "Displaying $objectCount grouped items:" -Color $psColor
 				$tableString = ($ItemsToProcess | Format-Table -AutoSize | Out-String).Trim()
-				Write-PrefixedLinesToConsole -Prefix $consolePrefix `
-					-Content $tableString `
-					-Color $psColor `
-					-IsPSCore $CurrentIsPSCore
+				Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content $tableString -Color $psColor
 			}
 			# Return summary object if requested
 			if ($CurrentReturnObject) {
@@ -675,17 +661,18 @@ function New-Log {
 					Message      = "Collection of $objectCount objects."
 					GroupedItems = $ItemsToProcess
 				}
-                # Add properties for testing
-                $groupedResult | Add-Member -MemberType NoteProperty -Name LogRecordCount -Value $script:LogRecordCount -Force
-                # Always add the RotatedFiles property if log rotation is enabled
-                if ($LogRotationSizeMB -gt 0) {
-                    if ($script:LogRotated -or $script:RotatedFiles.Count -gt 0) {
-                        $groupedResult | Add-Member -MemberType NoteProperty -Name RotatedFiles -Value $script:RotatedFiles -Force
-                    }
-                }
-                if ($CurrentIsPSCore) {
-                    $groupedResult | Add-Member -MemberType NoteProperty -Name UsedANSI -Value $true -Force
-                }
+				# Add properties for testing
+				$groupedResult | Add-Member -MemberType NoteProperty -Name LogRecordCount -Value $script:LogRecordCount -Force
+				# Always add the RotatedFiles property if log rotation is enabled
+				if ($LogRotationSizeMB -gt 0) {
+					if ($script:LogRotated -or $script:RotatedFiles.Count -gt 0) {
+						$groupedResult | Add-Member -MemberType NoteProperty -Name RotatedFiles -Value $script:RotatedFiles -Force
+					}
+				}
+				if (-not $CurrentNoConsole -and $CurrentIsPSCore) {
+					# Corrected logic for UsedANSI on grouped object
+					$groupedResult | Add-Member -MemberType NoteProperty -Name UsedANSI -Value $true -Force
+				}
 				return $groupedResult
 			}
 			else {
@@ -732,17 +719,9 @@ function New-Log {
 			if ($script:ShowInternalVerbose) {
 				Write-Verbose "Proc single item Process."
 			}
-			$result = Process-SingleLogItem -ItemToProcess $currentItem `
-				-CurrentLevel $Level `
-				-CurrentDateFormat $DateFormat `
-				-CurrentLevelColors $script:LevelColors `
-				-CurrentIsPSCore $script:isPSCore `
-				-CurrentNoConsole $NoConsole `
-				-CurrentReturnObject $ReturnObject `
-				-CurrentNoErrorLookup $NoErrorLookup `
-				-DontClearErrorVariable $DontClearErrorVariable.IsPresent -ErrorAction Stop
+			$result = Process-SingleLogItem -ItemToProcess $currentItem -CurrentLevel $Level -CurrentDateFormat $DateFormat -CurrentLevelColors $script:LevelColors -CurrentIsPSCore $script:isPSCore -CurrentNoConsole $NoConsole -CurrentReturnObject $ReturnObject -CurrentNoErrorLookup $NoErrorLookup -DontClearErrorVariable $DontClearErrorVariable.IsPresent -ErrorAction Stop
 			if ($ReturnObject -and $null -ne $result) {
-				Write-Output $result
+				$result
 			}
 		}
 		catch {
@@ -773,13 +752,7 @@ function New-Log {
 					Write-Verbose "Proc G ($itemCount) End."
 				}
 				try {
-					$result = Process-GroupedLogItems -ItemsToProcess $script:ObjectCollection `
-						-CurrentLevel $Level `
-						-CurrentDateFormat $DateFormat `
-						-CurrentLevelColors $script:LevelColors `
-						-CurrentIsPSCore $script:isPSCore `
-						-CurrentNoConsole $NoConsole `
-						-CurrentReturnObject $ReturnObject -ErrorAction Stop
+					$result = Process-GroupedLogItems -ItemsToProcess $script:ObjectCollection -CurrentLevel $Level -CurrentDateFormat $DateFormat -CurrentLevelColors $script:LevelColors -CurrentIsPSCore $script:isPSCore -CurrentNoConsole $NoConsole -CurrentReturnObject $ReturnObject -ErrorAction Stop
 					$processedGroup = $true
 				}
 				catch {
@@ -794,13 +767,7 @@ function New-Log {
 					Write-Verbose "Proc A>1 ($itemCount) End."
 				}
 				try {
-					$result = Process-GroupedLogItems -ItemsToProcess $script:ObjectCollection `
-						-CurrentLevel $Level `
-						-CurrentDateFormat $DateFormat `
-						-CurrentLevelColors $script:LevelColors `
-						-CurrentIsPSCore $script:isPSCore `
-						-CurrentNoConsole $NoConsole `
-						-CurrentReturnObject $ReturnObject -ErrorAction Stop
+					$result = Process-GroupedLogItems -ItemsToProcess $script:ObjectCollection -CurrentLevel $Level -CurrentDateFormat $DateFormat -CurrentLevelColors $script:LevelColors -CurrentIsPSCore $script:isPSCore -CurrentNoConsole $NoConsole -CurrentReturnObject $ReturnObject -ErrorAction Stop
 					$processedGroup = $true
 				}
 				catch {
@@ -814,15 +781,7 @@ function New-Log {
 					Write-Verbose "Proc A=1 (1) End."
 				}
 				try {
-					$result = Process-SingleLogItem -ItemToProcess $script:ObjectCollection[0] `
-						-CurrentLevel $Level `
-						-CurrentDateFormat $DateFormat `
-						-CurrentLevelColors $script:LevelColors `
-						-CurrentIsPSCore $script:isPSCore `
-						-CurrentNoConsole $NoConsole `
-						-CurrentReturnObject $ReturnObject `
-						-CurrentNoErrorLookup $NoErrorLookup `
-						-DontClearErrorVariable $DontClearErrorVariable.IsPresent -ErrorAction Stop
+					$result = Process-SingleLogItem -ItemToProcess $script:ObjectCollection[0] -CurrentLevel $Level -CurrentDateFormat $DateFormat -CurrentLevelColors $script:LevelColors -CurrentIsPSCore $script:isPSCore -CurrentNoConsole $NoConsole -CurrentReturnObject $ReturnObject -CurrentNoErrorLookup $NoErrorLookup -DontClearErrorVariable $DontClearErrorVariable.IsPresent -ErrorAction Stop
 					$processedGroup = $true
 				}
 				catch {
@@ -832,7 +791,7 @@ function New-Log {
 			}
 			# Return result object if requested
 			if ($processedGroup -and $ReturnObject -and $null -ne $result) {
-				Write-Output $result
+				$result
 			}
 		}
 		catch {
@@ -840,7 +799,7 @@ function New-Log {
 		}
 		finally {
 			# Restore console encoding
-			if ($script:OriginalConsoleEncoding -ne $null -and [Console]::OutputEncoding -ne $script:OriginalConsoleEncoding) {
+			if ($null -ne $script:OriginalConsoleEncoding -and [Console]::OutputEncoding -ne $script:OriginalConsoleEncoding) {
 				if ($script:ShowInternalVerbose) {
 					Write-Verbose "Restore console encoding."
 				}
