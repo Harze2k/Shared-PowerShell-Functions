@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 <#
 .SYNOPSIS
 	Downloads a file from a specified URL with support for progress, resume, retries, custom headers, and HttpClient integration.
@@ -79,13 +78,35 @@
 	Downloads using the pre-configured HttpClient instance and disposes of the client afterwards.
 .NOTES
     Author: Harze2k
-    Date:   2025-04-27 (Updated)
-    Version: 1.6 (First public release.)
+    Date:   2025-05-10
+    Version: 1.7 (Fixed some small bugs.)
 	- Requires PowerShell 5.1 or later.
 	- Depends on the custom 'New-Log' function for logging. Ensure New-Log is available in the scope.
 	- Uses System.Net.Http.HttpClient for downloads, which is generally more performant than older methods like WebClient or Invoke-WebRequest for large files.
 	- Automatic filename detection relies on the URL path and may not always be perfect. Specify -FileName for guaranteed results.
 	- Buffer size optimization attempts to balance throughput and memory usage but is not guaranteed to be optimal in all network/system conditions.
+
+	Sample output:
+
+	[2025-05-10 01:37:35.051][SUCCESS] Auto-detected FileName: 'Git-2.39.1-32-bit.exe' (from URL path)
+	[2025-05-10 01:37:35.055][INFO] Validated Input: URL='https://github.com/git-for-windows/git/releases/download/v2.39.1.windows.1/Git-2.39.1-32-bit.exe', FileName='Git-2.39.1-32-bit.exe', FilePath='C:\Users\Martin\AppData\Local\Temp\DownloadTests'
+	[2025-05-10 01:37:35.076][INFO] Download Attempt 1/2 : URL='https://github.com/git-for-windows/git/releases/download/v2.39.1.windows.1/Git-2.39.1-32-bit.exe', File='C:\Users\Martin\AppData\Local\Temp\DownloadTests\Git-2.39.1-32-bit.exe'
+	[2025-05-10 01:37:35.816][SUCCESS] Optimal buffer size: 128,00 KB (Factor: 2, FileSize: N/A, RAM Cap: 8,00 MB)
+	[2025-05-10 01:37:37.787][SUCCESS] Download completed successfully for 'Git-2.39.1-32-bit.exe'.
+
+	Status       : Completed
+	FileName     : Git-2.39.1-32-bit.exe
+	FileSize     : 50,65 MB
+	FilePath     : C:\Users\Martin\AppData\Local\Temp\DownloadTests\Git-2.39.1-32-bit.exe
+	TotalBytes   : 53114560
+	TimeTaken    : 00:00:01.962
+	AverageSpeed : 25,809 MB/s
+	URL          : https://objects.githubusercontent.com/github-production-release-asset-2e65be/23216272/78439ba6-574e-4811-bb39-0a7806311245?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20250509%2Fus-east-1%2Fs3%2Faws4_request&X
+	-Amz-Date=20250509T233904Z&X-Amz-Expires=300&X-Amz-Signature=8b53475d7d15b819378fcb4828dd59d9311c049513252f5cf8f19424e1e28474&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3DGit-2.39.1-32-bit.exe&response-co
+	ntent-type=application%2Foctet-stream
+	Retries      : 0
+	ResumeUsed   : False
+	Error        :
 .LINK
 	System.Net.Http.HttpClient
 	https://docs.microsoft.com/en-us/dotnet/api/system.net.http.httpclient
@@ -93,19 +114,19 @@
 function Download-File {
 	[CmdletBinding(SupportsShouldProcess = $true)]
 	param(
-		[Parameter(Mandatory, Position = 0, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)][object]$UrlInput,
-		[Parameter(Position = 1, ValueFromPipelineByPropertyName = $true)][string]$FileName,
-		[Parameter(Position = 2, ValueFromPipelineByPropertyName = $true)][string]$FilePath = (Get-Location).Path,
-		[Parameter(Position = 3, ValueFromPipelineByPropertyName = $true)][System.Net.Http.HttpClient]$HTTPClient,
-		[Parameter(Position = 4, ValueFromPipelineByPropertyName = $true)][ValidateRange(1, 10)][int]$BufferFactor = 0, # Default 0 means auto-calculate based on file size later
-		[Parameter(ValueFromPipelineByPropertyName = $true)][ValidateRange(1, [int]::MaxValue)][int]$TimeoutSeconds = 100,
-		[Parameter(ValueFromPipelineByPropertyName = $true)][switch]$DisposeClient,
-		[Parameter(ValueFromPipelineByPropertyName = $true)][switch]$Resume,
-		[Parameter(ValueFromPipelineByPropertyName = $true)][ValidateRange(0, [int]::MaxValue)][int]$RetryCount = 1,
-		[Parameter(ValueFromPipelineByPropertyName = $true)][ValidateRange(0, [int]::MaxValue)][int]$RetryDelaySeconds = 5,
-		[Parameter(ValueFromPipelineByPropertyName = $true)][hashtable]$Headers,
-		[Parameter(ValueFromPipelineByPropertyName = $true)][switch]$IgnoreSSLErrors,
-		[Parameter(ValueFromPipelineByPropertyName = $true)][switch]$Force
+		[Parameter(Mandatory, Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)][object]$UrlInput,
+		[Parameter(Position = 1, ValueFromPipelineByPropertyName)][string]$FileName,
+		[Parameter(Position = 2, ValueFromPipelineByPropertyName)][string]$FilePath = (Get-Location).Path,
+		[Parameter(Position = 3, ValueFromPipelineByPropertyName)][System.Net.Http.HttpClient]$HTTPClient,
+		[Parameter(Position = 4, ValueFromPipelineByPropertyName)][ValidateRange(1, 10)][int]$BufferFactor = 0, # Default 0 means auto-calculate based on file size later
+		[Parameter(ValueFromPipelineByPropertyName)][ValidateRange(1, [int]::MaxValue)][int]$TimeoutSeconds = 100,
+		[Parameter(ValueFromPipelineByPropertyName)][switch]$DisposeClient,
+		[Parameter(ValueFromPipelineByPropertyName)][switch]$Resume,
+		[Parameter(ValueFromPipelineByPropertyName)][ValidateRange(0, [int]::MaxValue)][int]$RetryCount = 1,
+		[Parameter(ValueFromPipelineByPropertyName)][ValidateRange(0, [int]::MaxValue)][int]$RetryDelaySeconds = 5,
+		[Parameter(ValueFromPipelineByPropertyName)][hashtable]$Headers,
+		[Parameter(ValueFromPipelineByPropertyName)][switch]$IgnoreSSLErrors,
+		[Parameter(ValueFromPipelineByPropertyName)][switch]$Force
 	)
 	begin {
 		# Helper function to format file sizes nicely
@@ -115,19 +136,17 @@ function Download-File {
 				[Parameter(Mandatory)][long]$Bytes,
 				[Parameter()][int]$Precision = 2 # Default to 2 decimal places
 			)
-			process {
-				if ($Bytes -lt 0) { return "N/A" }
-				if ($Bytes -eq 0) { return "0 B" }
-				$sizes = 'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'
-				$base = 1024
-				$index = [Math]::Floor([Math]::Log($Bytes, $base))
-				$index = [Math]::Min($index, $sizes.Count - 1)
-				$index = [Math]::Max(0, $index)
-				$value = $Bytes / [Math]::Pow($base, $index)
-				# Use the Precision parameter in the format string
-				$formatString = "{0:N$($Precision)} {1}"
-				return $formatString -f $value, $sizes[$index]
-			}
+			if ($Bytes -lt 0) { return "N/A" }
+			if ($Bytes -eq 0) { return "0 B" }
+			$sizes = 'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'
+			$base = 1024
+			$index = [Math]::Floor([Math]::Log($Bytes, $base))
+			$index = [Math]::Min($index, $sizes.Count - 1)
+			$index = [Math]::Max(0, $index)
+			$value = $Bytes / [Math]::Pow($base, $index)
+			# Use the Precision parameter in the format string
+			$formatString = "{0:N$($Precision)} {1}"
+			return $formatString -f $value, $sizes[$index]
 		}
 		# Helper function to determine a reasonable buffer size
 		function Get-OptimalBufferSize {
@@ -136,59 +155,57 @@ function Download-File {
 				[Parameter(Mandatory)][long]$FileSize, # -1 if unknown
 				[Parameter()][int]$Factor = 0 # User override factor (1-10)
 			)
-			process {
-				$KB = 1024L; $MB = 1024L * $KB; $GB = 1024L * $MB
-				$smallFactor = 1   # For files <= 100MB
-				$mediumFactor = 2  # For files <= 1000MB
-				$largeFactor = 4   # For files > 1000MB
-				[int]$bufferFactor = if ($Factor -ge 1 -and $Factor -le 10) {
-					$Factor
+			$KB = 1024L; $MB = 1024L * $KB; $GB = 1024L * $MB
+			$smallFactor = 1   # For files <= 100MB
+			$mediumFactor = 2  # For files <= 1000MB
+			$largeFactor = 4   # For files > 1000MB
+			[int]$bufferFactor = if ($Factor -ge 1 -and $Factor -le 10) {
+				$Factor
+			}
+			else {
+				if ($FileSize -lt 0) {
+					$mediumFactor
+				}
+				elseif ($FileSize -le (100L * $MB)) {
+					$smallFactor
+				}
+				elseif ($FileSize -le (1000L * $MB)) {
+					$mediumFactor
 				}
 				else {
-					if ($FileSize -lt 0) {
-						$mediumFactor
-					}
-					elseif ($FileSize -le (100L * $MB)) {
-						$smallFactor
-					}
-					elseif ($FileSize -le (1000L * $MB)) {
-						$mediumFactor
-					}
-					else {
-						$largeFactor
-					}
+					$largeFactor
 				}
-				# Determine base buffer size based on file size
-				[long]$baseBufferSize = 64L * $KB # Default
-				if ($FileSize -ge 0) {
-					if ($FileSize -lt (1L * $MB)) { $baseBufferSize = 16L * $KB }
-					elseif ($FileSize -lt (10L * $MB)) { $baseBufferSize = 64L * $KB }
-					elseif ($FileSize -lt (100L * $MB)) { $baseBufferSize = 128L * $KB }
-					elseif ($FileSize -lt (500L * $MB)) { $baseBufferSize = 256L * $KB }
-					elseif ($FileSize -lt (1L * $GB)) { $baseBufferSize = 512L * $KB }
-					else { $baseBufferSize = 1L * $MB }
-				}
-				[long]$availableMemory = 1L * $GB # Default fallback
-				[long]$maxBufferCap = 8L * $MB
-				try {
-					$osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-					if ($null -ne $osInfo -and $null -ne $osInfo.FreePhysicalMemory) {
-						$availableMemory = $osInfo.FreePhysicalMemory * $KB
-					}
-				}
-				catch {
-					New-Log "Failed getting memory information. Using default assumption for buffer calculation." -Level ERROR
-				}
-				[long]$ramPercentage = [long]($availableMemory * 0.005) # 0.5% of free RAM
-				[long]$maxBufferBasedOnRam = [Math]::Min($maxBufferCap, $ramPercentage)
-				[long]$minBuffer = 4L * $KB # Absolute minimum buffer size
-				$maxBufferBasedOnRam = [Math]::Max($minBuffer, $maxBufferBasedOnRam) # Ensure RAM cap is not below min
-				[long]$calculatedBuffer = $baseBufferSize * $bufferFactor
-				$calculatedBuffer = [Math]::Min($calculatedBuffer, $maxBufferBasedOnRam) # Apply RAM cap
-				[long]$finalBuffer = [Math]::Max($minBuffer, $calculatedBuffer) # Apply minimum floor
-				New-Log "Optimal buffer size: $(Format-FileSize $finalBuffer) (Factor: $bufferFactor, FileSize: $(Format-FileSize $FileSize), RAM Cap: $(Format-FileSize $maxBufferBasedOnRam))" -Level SUCCESS
-				return $finalBuffer
 			}
+			# Determine base buffer size based on file size
+			[long]$baseBufferSize = 64L * $KB # Default
+			if ($FileSize -ge 0) {
+				if ($FileSize -lt (1L * $MB)) { $baseBufferSize = 16L * $KB }
+				elseif ($FileSize -lt (10L * $MB)) { $baseBufferSize = 64L * $KB }
+				elseif ($FileSize -lt (100L * $MB)) { $baseBufferSize = 128L * $KB }
+				elseif ($FileSize -lt (500L * $MB)) { $baseBufferSize = 256L * $KB }
+				elseif ($FileSize -lt (1L * $GB)) { $baseBufferSize = 512L * $KB }
+				else { $baseBufferSize = 1L * $MB }
+			}
+			[long]$availableMemory = 1L * $GB # Default fallback
+			[long]$maxBufferCap = 8L * $MB
+			try {
+				$osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+				if ($null -ne $osInfo -and $null -ne $osInfo.FreePhysicalMemory) {
+					$availableMemory = $osInfo.FreePhysicalMemory * $KB
+				}
+			}
+			catch {
+				New-Log "Failed getting memory information. Using default assumption for buffer calculation." -Level ERROR
+			}
+			[long]$ramPercentage = [long]($availableMemory * 0.005) # 0.5% of free RAM
+			[long]$maxBufferBasedOnRam = [Math]::Min($maxBufferCap, $ramPercentage)
+			[long]$minBuffer = 4L * $KB # Absolute minimum buffer size
+			$maxBufferBasedOnRam = [Math]::Max($minBuffer, $maxBufferBasedOnRam) # Ensure RAM cap is not below min
+			[long]$calculatedBuffer = $baseBufferSize * $bufferFactor
+			$calculatedBuffer = [Math]::Min($calculatedBuffer, $maxBufferBasedOnRam) # Apply RAM cap
+			[long]$finalBuffer = [Math]::Max($minBuffer, $calculatedBuffer) # Apply minimum floor
+			New-Log "Optimal buffer size: $(Format-FileSize $finalBuffer) (Factor: $bufferFactor, FileSize: $(Format-FileSize $FileSize), RAM Cap: $(Format-FileSize $maxBufferBasedOnRam))" -Level SUCCESS
+			return $finalBuffer
 		}
 		$originalSecurityProtocol = $null
 		try {
@@ -248,7 +265,7 @@ function Download-File {
 				$result.Status = "Failed"
 				$result.Error = "Phase 1 (Input Validation/Param) Failed."
 				New-Log $result.Error -Level WARNING
-				Write-Output $result
+				$result
 				return
 			}
 			$result.URL = $targetUrl
@@ -290,7 +307,7 @@ function Download-File {
 				$result.Status = "Failed"
 				$result.Error = "Phase 2 (Path Setup) Failed for filename '$targetFileName'."
 				New-Log $result.Error -Level WARNING
-				Write-Output $result
+				$result
 				return
 			}
 			$result.FileName = $targetFileName
@@ -301,7 +318,7 @@ function Download-File {
 			$result.Status = "Failed"
 			$result.Error = "Phase 1 (Input Validation/Parameter Resolution) Failed: $($_.Exception.Message)"
 			New-Log $result.Error -Level ERROR
-			Write-Output $result
+			$result
 			return
 		}
 		$outputFile = $null
@@ -326,7 +343,7 @@ function Download-File {
 			$result.Error = "Phase 2 (Path Setup) Failed."
 			if ($outputFile) { $result.FilePath = $outputFile }
 			New-Log $result.Error -Level ERROR
-			Write-Output $result
+			$result
 			return
 		}
 		$currentHttpClient = $null
@@ -374,10 +391,10 @@ function Download-File {
 			$result.Status = "Failed"
 			$result.Error = "Phase 3 (HttpClient Setup) Failed."
 			New-Log $result.Error -Level ERROR
-			if ($disposeHttpClientLocally -and $currentHttpClient -ne $null) {
+			if ($disposeHttpClientLocally -and $null -ne $currentHttpClient) {
 				try { $currentHttpClient.Dispose() } catch {}
 			}
-			Write-Output $result
+			$result
 			return
 		}
 		$performDownload = $true
@@ -475,12 +492,12 @@ function Download-File {
 						if ($attemptResumeThisTry) {
 							if ($response.StatusCode -eq [System.Net.HttpStatusCode]::PartialContent) {
 								$contentRange = $response.Content.Headers.ContentRange
-								if ($contentRange -ne $null -and $contentRange.HasLength -and $contentRange.From -eq $existingFileSize) {
+								if ($null -ne $contentRange -and $contentRange.HasLength -and $contentRange.From -eq $existingFileSize) {
 									$effectiveTotalLength = $contentRange.Length.Value
 									New-Log "Resume accepted (206 Partial Content). Continuing download. Expected total size: $(Format-FileSize $effectiveTotalLength)" -Level SUCCESS
 									$result.ResumeUsed = $true
 								}
-								elseif ($contentRange -ne $null -and $contentRange.From -ne $existingFileSize) {
+								elseif ($null -ne $contentRange -and $contentRange.From -ne $existingFileSize) {
 									New-Log "Resume failed: Server returned 206 Partial Content but for unexpected range (From $($contentRange.From) != Requested $existingFileSize). Restarting download from scratch for this attempt." -Level WARNING
 									$attemptResumeThisTry = $false
 									$existingFileSize = 0L
@@ -581,8 +598,8 @@ function Download-File {
 							Start-Sleep -Seconds $RetryDelaySeconds
 							if ($Resume) {
 								try {
-									if ($fileStream -ne $null) { try { $fileStream.Dispose() } catch {} finally { $fileStream = $null } }
-									if ($contentStream -ne $null) { try { $contentStream.Dispose() } catch {} finally { $contentStream = $null } }
+									if ($null -ne $fileStream) { try { $fileStream.Dispose() } catch {} finally { $fileStream = $null } }
+									if ($null -ne $contentStream) { try { $contentStream.Dispose() } catch {} finally { $contentStream = $null } }
 									if (Test-Path $outputFile -PathType Leaf) {
 										$existingFileSize = (Get-Item $outputFile).Length
 										New-Log "Re-checked file size for resume retry: $(Format-FileSize $existingFileSize)" -Level VERBOSE
@@ -613,7 +630,7 @@ function Download-File {
 							$result.Retries = $RetryCount + 1 # Indicate all attempts used
 							try {
 								if (Test-Path $outputFile -PathType Leaf) {
-									if ($fileStream -ne $null) { try { $fileStream.Dispose() } catch {} finally { $fileStream = $null } }
+									if ($null -ne $fileStream) { try { $fileStream.Dispose() } catch {} finally { $fileStream = $null } }
 									$finalFileInfo = Get-Item $outputFile
 									$result.TotalBytes = $finalFileInfo.Length
 									$result.FileSize = Format-FileSize $finalFileInfo.Length
@@ -654,16 +671,16 @@ function Download-File {
 			try { Write-Progress -Activity "Downloading $($result.FileName)" -Completed -Id $progressId } catch {}
 		}
 		finally {
-			if ($disposeHttpClientLocally -and $sharedHttpClient -ne $null) {
+			if ($disposeHttpClientLocally -and $null -ne $sharedHttpClient) {
 				New-Log "Disposing internally created HttpClient for '$($result.FileName)'." -Level VERBOSE
 				try { $sharedHttpClient.Dispose() } catch { New-Log "Error disposing internal HttpClient" -Level ERROR }
 			}
 		}
-		Write-Output $result
+		$result
 	}
 	end {
 		New-Log "Finished processing all pipeline input for Download-File." -Level VERBOSE
-		if ($originalSecurityProtocol -ne $null) {
+		if ($null -ne $originalSecurityProtocol) {
 			try {
 				New-Log "Restoring original SecurityProtocol settings: $originalSecurityProtocol" -Level VERBOSE
 				[System.Net.ServicePointManager]::SecurityProtocol = $originalSecurityProtocol
