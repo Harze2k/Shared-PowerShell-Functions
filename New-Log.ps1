@@ -50,7 +50,7 @@ function New-Log {
         Defaults to 'yyyy-MM-dd HH:mm:ss.fff'.
     .PARAMETER ErrorObject
         Allows explicitly passing an ErrorRecord object (e.g., from a catch block: $_ | New-Log -Level ERROR -ErrorObject $_).
-        This takes precedence over automatic error lookup. Defaults to $null, allowing the function to attempt automatic capture.
+        This takes precedence over automatic error lookup. Defaults to trying to capture $_ from the caller's scope if available.
     .EXAMPLE
 		$ht = @{ Name = "John"; Age = 30; Role = "Developer" }
 		$ht | New-Log -Level INFO
@@ -113,8 +113,8 @@ function New-Log {
 		[2025-04-23 05:37:32.118][ERROR Detail] Code: 1 / 0
     .NOTES
         Author: Harze2k
-        Date:   2025-05-09 (Updated)
-        Version: 3.6 (Optimized ErrorObject default and Write-PrefixedLinesToConsole helper)
+        Date:   2025-05-10
+        Version: 3.7 (Fixed output when -Level ERROR is used.)
         - Console writer now respects and preserves the original indentation from formatters (like ConvertTo-Json, Format-Table) instead of applying a secondary, fixed indent.
         - Added 'Type is [typename]' line for complex objects in console TEXT output.
         - Internal Write-Verbose messages only show if -Verbose is passed *directly* to New-Log.
@@ -141,10 +141,9 @@ function New-Log {
 		[Parameter(Position = 11)][switch]$NoAutoGroup,
 		[Parameter(Position = 12)][switch]$NoErrorLookup,
 		[Parameter(Position = 13)][string]$DateFormat = 'yyyy-MM-dd HH:mm:ss.fff',
-		[Parameter()]$ErrorObject = $null
+		[Parameter()]$ErrorObject = $(if ($global:error.Count -gt 0) { $global:error[0] } else { $null })
 	)
 	Begin {
-		#region Initialize Variables
 		$script:isPSCore = $PSVersionTable.PSVersion.Major -ge 6
 		$script:LevelColors = @{
 			ERROR   = @{ ANSI = 91; PS = 'Red' }
@@ -164,9 +163,9 @@ function New-Log {
 		$script:LogRecordCount = 0    # Added to track log entries for testing
 		$script:RotatedFiles = @()    # Added to track rotated files for testing
 		$script:LogRotated = $false   # Added flag to indicate if rotation occurred
-		#endregion Initialize Variables
-		if ($script:ShowInternalVerbose) { Write-Verbose "Internal verbose logging enabled for this call." }
-		#region Setup Console Encoding
+		if ($script:ShowInternalVerbose) {
+			Write-Verbose "Internal verbose logging enabled for this call."
+		}
 		try {
 			$script:OriginalConsoleEncoding = [Console]::OutputEncoding
 			[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -174,8 +173,6 @@ function New-Log {
 		catch {
 			Write-Warning "Failed to set console output encoding to UTF8: $($_.Exception.Message)"
 		}
-		#endregion Setup Console Encoding
-		#region Handle Timestamped Log File
 		if ($LogFilePath -and $AppendTimestampToFile) {
 			try {
 				$fileInfo = [System.IO.FileInfo]::new($LogFilePath)
@@ -192,9 +189,7 @@ function New-Log {
 				Write-Error "Failed to append timestamp to LogFilePath '$LogFilePath' : $($_.Exception.Message)"
 			}
 		}
-		#endregion Handle Timestamped Log File
-		#region Helper Functions
-		#region Console Output Functions
+		#region Write-PrefixedLinesToConsole
 		function Write-PrefixedLinesToConsole {
 			# MODIFIED: Removed IsPSCore parameter
 			[CmdletBinding()]
@@ -217,8 +212,8 @@ function New-Log {
 				$script:LogRecordCount++
 			}
 		}
-		#endregion Console Output Functions
-		#region Error Handling Functions
+		#endregion Write-PrefixedLinesToConsole
+		#region Get-ErrorToProcess
 		function Get-ErrorToProcess {
 			[CmdletBinding()]
 			param(
@@ -256,8 +251,8 @@ function New-Log {
 			}
 			return $null
 		}
-		#endregion Error Handling Functions
-		#region Formatting Functions
+		#endregion Get-ErrorToProcess
+		#region Format-ItemForTextOutput
 		function Format-ItemForTextOutput {
 			[CmdletBinding()]
 			param(
@@ -300,8 +295,8 @@ function New-Log {
 			}
 			return ($Item | Out-String -Width 4096).Trim()
 		}
-		#endregion Formatting Functions
-		#region File Operations Functions
+		#endregion Format-ItemForTextOutput
+		#region Write-LogToFile
 		function Write-LogToFile {
 			[CmdletBinding()]
 			param(
@@ -372,8 +367,8 @@ function New-Log {
 				Write-Error "Failed write log '$LogFilePath': $($_.Exception.Message)"
 			}
 		}
-		#endregion File Operations Functions
-		#region Item Processing Functions
+		#endregion Write-LogToFile
+		#region Process-SingleLogItem
 		function Process-SingleLogItem {
 			[CmdletBinding()]
 			param(
@@ -407,6 +402,7 @@ function New-Log {
 				$effectiveItem = ""
 			}
 			# Special handling for ERROR level
+			$err = $null # Ensure $err is initialized
 			if ($CurrentLevel -eq 'ERROR') {
 				$err = Get-ErrorToProcess -CurrentItem $effectiveItem -NoErrorLookupParameter $CurrentNoErrorLookup
 				if ($err) {
@@ -489,23 +485,78 @@ function New-Log {
 				else {
 					"[$timestamp][$CurrentLevel]"
 				}
-				Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content $formattedTextMessage -Color $psColor
-				# Additional error details for console
 				if ($CurrentLevel -eq 'ERROR' -and $errorDetails) {
-					$errorPrefix = if ($CurrentIsPSCore) {
-						"`e[34m[$timestamp]$ansiReset`e[${colorCode}m[ERROR Detail]$ansiReset"
+					# $err is the ErrorRecord obtained from Get-ErrorToProcess and used to build $errorDetails
+					$functionNameFromCaller = "N/A"
+					# coderowContext describes the nature of the block that *called* New-Log (e.g., testtest function)
+					$coderowContext = "Unknown"
+					if ($errorDetails.CallerInfo) {
+						# Parse $errorDetails.CallerInfo: "File [...], Line [...], Context [Function [name]]" or "Context [script.ps1]"
+						$contextMatchInCallerInfo = [regex]::Match($errorDetails.CallerInfo, "Context \[(.*?)\]$")
+						if ($contextMatchInCallerInfo.Success) {
+							$fullContextString = $contextMatchInCallerInfo.Groups[1].Value
+							if ($fullContextString.StartsWith("Function [") -and $fullContextString.EndsWith("]")) {
+								$functionNameFromCaller = $fullContextString.Substring("Function [".Length, $fullContextString.Length - "Function [".Length - "]".Length)
+								$coderowContext = "Function"
+							}
+							else {
+								$functionNameFromCaller = $fullContextString # Should be a script name like "MyScript.ps1"
+								$coderowContext = "Script"
+							}
+						}
+					}
+					$failedCodeLineNum = "N/A"
+					$failedCodeColNum = "N/A"
+					if ($err.InvocationInfo) {
+						# $err is the ErrorRecord for the actual failed command
+						if ($null -ne $err.InvocationInfo.ScriptLineNumber -and $err.InvocationInfo.ScriptLineNumber -gt 0) {
+							$failedCodeLineNum = $err.InvocationInfo.ScriptLineNumber
+						}
+						# OffsetInLine can be 0 (start of line) or not applicable for some errors.
+						# The example (2,299) implies a 1-based column, but OffsetInLine is 0-based for position.
+						# For display, if it's a valid number, we can use it. Let's keep it as is from InvocationInfo.
+						if ($null -ne $err.InvocationInfo.OffsetInLine) {
+							# OffsetInLine can be 0, which is valid
+							$failedCodeColNum = $err.InvocationInfo.OffsetInLine
+						}
+					}
+					# coderowLocation describes where the *actual failing code* was located (e.g., in a Script file)
+					$coderowLocation = "Unknown"
+					if ($err.InvocationInfo -and $err.InvocationInfo.ScriptName) {
+						$coderowLocation = "Script"
+					}
+					elseif ($err.InvocationInfo) {
+						# If InvocationInfo exists but no ScriptName, assume Interactive
+						$coderowLocation = "Interactive"
+					}
+					$failedCodeText = if ($errorDetails.FailedCode -ne 'N/A') { $errorDetails.FailedCode } else { "N/A" }
+					$exceptionMsgText = $errorDetails.Exception # This is $err.Exception.Message
+					if ($CurrentIsPSCore) {
+						$ansiReset = "`e[0m"
+						$blue = "`e[94m"
+						$errorSuffix = " [${blue}Function${ansiReset}: $functionNameFromCaller]"
+						$errorSuffix += "[${blue}CodeRow${ansiReset}: ($failedCodeLineNum,$failedCodeColNum) ($coderowContext,$coderowLocation)]"
+						$errorSuffix += "[${blue}FailedCode${ansiReset}: $failedCodeText]"
+						$errorSuffix += "[${blue}ExceptionMessage${ansiReset}: ${ansireset}`e[$($CurrentLevelColors[$CurrentLevel].ANSI)m$exceptionMsgText$ansireset]"
 					}
 					else {
-						"[$timestamp][ERROR Detail]"
+						$errorSuffix = " [Function: $functionNameFromCaller]"
+						$errorSuffix += "[CodeRow: ($failedCodeLineNum,$failedCodeColNum) ($coderowContext,$coderowLocation)]"
+						$errorSuffix += "[FailedCode: $failedCodeText]"
+						$errorSuffix += "[ExceptionMessage: $exceptionMsgText]"
 					}
-					Write-PrefixedLinesToConsole -Prefix $errorPrefix -Content "Exception: $($errorDetails.Exception)" -Color $psColor
-					if ($errorDetails.CallerInfo) {
-						Write-PrefixedLinesToConsole -Prefix $errorPrefix -Content "Caller: $($errorDetails.CallerInfo)" -Color $psColor
-					}
-					if ($errorDetails.FailedCode -ne 'N/A') {
-						Write-PrefixedLinesToConsole -Prefix $errorPrefix -Content "Code: $($errorDetails.FailedCode)" -Color $psColor
-					}
+					# $formattedTextMessage is the user-provided message (e.g., "Something was broken..")
+					# or it defaults to the exception message if no user message was supplied to New-Log for this error.
+					Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content ($formattedTextMessage + $errorSuffix) -Color $psColor
 				}
+				else {
+					# This handles:
+					# 1. Non-ERROR level log messages.
+					# 2. ERROR level messages where $errorDetails could not be populated (e.g., -NoErrorLookup was used
+					#    and no explicit ErrorObject or piped ErrorRecord was provided).
+					Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content $formattedTextMessage -Color $psColor
+				}
+				#endregion MODIFIED CONSOLE OUTPUT FOR ERROR LEVEL
 			}
 			# File logging
 			if ($LogFilePath) {
@@ -574,6 +625,8 @@ function New-Log {
 				return $null
 			}
 		}
+		#endregion Process-SingleLogItem
+		#region Process-GroupedLogItems
 		function Process-GroupedLogItems {
 			[CmdletBinding()]
 			param(
@@ -679,9 +732,8 @@ function New-Log {
 				return $null
 			}
 		}
-		#endregion Item Processing Functions
-		#endregion Helper Functions
-	} # End Begin block
+		#endregion Process-GroupedLogItems
+	}
 	Process {
 		$currentItem = $Message
 		# Skip VERBOSE level messages if not enabled
