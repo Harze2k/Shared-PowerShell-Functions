@@ -1,9 +1,11 @@
 ﻿#Requires -Version 7.0
+#Requires -modules ThreadJob
+#Requires -modules Microsoft.PowerShell.ThreadJob
 #region Check-PSResourceRepository
 <#
 Author: Harze2k
-Date:   2025-05-07
-Version: 3.3 (Massive rework!)
+Date:   2025-05-09
+Version: 3.4 (Bug fix. $module was spelled incorrectly.)
 	-Added more Parallel Processing
 	-Added ThreadJobs
 	-Over 150% faster
@@ -116,7 +118,7 @@ function Check-PSResourceRepository {
 			$latestVersion = ($foundModule | Sort-Object Version -Descending | Select-Object -First 1).Version
 			$isInstalled = $false
 			if ($latestVersion) {
-				$isInstalled = Get-module -Name $moduleName -ListAvailable -Verbose:$false | Where-Object { $_.Version -eq $latestVersion } | Select-Object -First 1
+				$isInstalled = Get-Module -Name $moduleName -ListAvailable -Verbose:$false | Where-Object { $_.Version -eq $latestVersion } | Select-Object -First 1
 			}
 			else {
 				New-Log "Could not find module $moduleName in PSGallery to check installation status." -Level WARNING
@@ -765,7 +767,7 @@ function Get-ModuleUpdateStatus {
 		try {
 			$stableModuleInfo = Find-Module -Name $moduleNameToFetch -Repository $repositoriesForJob -ErrorAction SilentlyContinue -Verbose:$false |
 				Sort-Object -Property Version -Descending |
-					Select-Object -First 1
+				Select-Object -First 1
 			if ($stableModuleInfo) { $stableResult = $stableModuleInfo }
 		}
 		catch {
@@ -774,8 +776,8 @@ function Get-ModuleUpdateStatus {
 		try {
 			$prereleaseModuleInfo = Find-Module -Name $moduleNameToFetch -AllowPrerelease -Repository $repositoriesForJob -ErrorAction SilentlyContinue -Verbose:$false |
 				Where-Object { ($_.PSObject.Properties['IsPrerelease'] -and $_.PSObject.Properties['IsPrerelease'].Value) -or ($_.Version.ToString() -match '-') } |
-					Sort-Object -Property Version -Descending |
-						Select-Object -First 1
+				Sort-Object -Property Version -Descending |
+				Select-Object -First 1
 			if ($prereleaseModuleInfo) { $prereleaseResult = $prereleaseModuleInfo }
 		}
 		catch {
@@ -955,7 +957,7 @@ function Get-ModuleUpdateStatus {
 			}
 			else {
 				"$($highestLocalInstall.ModuleVersion)"
-            }
+			}
 			if ([string]::IsNullOrWhiteSpace($latestOnlineStr) -or [string]::IsNullOrWhiteSpace($highestLocalStr)) {
 				New-Log "[$moduleName] Invalid online ('$latestOnlineStr') or local ('$highestLocalStr') version string. Skipping." -Level VERBOSE
 				$sync.errors++
@@ -1000,7 +1002,6 @@ function Get-ModuleUpdateStatus {
 				# Group by BasePath to check each unique installation location
 				$installsByPath = $allLocalInstalls | Group-Object -Property BasePath
 				foreach ($pathGroup in $installsByPath) {
-					$currentPath = $pathGroup.Name
 					$versionsInThisPath = $pathGroup.Group # Array of local installs at this path
 					$latestOnlineVersionFoundInThisPath = $false
 					foreach ($installedVersionEntry in $versionsInThisPath) {
@@ -1606,8 +1607,6 @@ function Remove-OutdatedVersions {
 	[Mandatory] An array of strings, where each string is a base installation path for the module (e.g., "C:\Program Files\WindowsPowerShell\Modules\MyModule"). The function will look for version subdirectories (e.g., "1.0.0", "1.1.0-beta") within these paths to clean.
 	.PARAMETER LatestVersion
 	[Mandatory] A [System.Version] object representing the base numeric version of the module that should be KEPT (not removed) (e.g., for "2.1.0-preview3", this is the [version]"2.1.0").
-	.PARAMETER OutdatedVersions
-	[Optional] An array of strings representing specific version numbers that were previously identified as outdated. This parameter is present for informational purposes or potential future use but is **not directly used** by the current core removal logic within this function to decide which folders to delete. Old versions are actively identified by scanning subdirectories in `ModuleBasePaths` and comparing their names against the `LatestVersion`/`PreReleaseVersion` to keep.
 	.PARAMETER DoNotClean
 	[Optional] An array of module names that should never be cleaned, even if old versions are found. Defaults to `@('PowerShellGet', 'Microsoft.PowerShell.PSResourceGet')`.
 	.PARAMETER PreReleaseVersion
@@ -1621,7 +1620,6 @@ function Remove-OutdatedVersions {
 		[Parameter(Mandatory)][string]$ModuleName,
 		[Parameter(Mandatory)][string[]]$ModuleBasePaths,
 		[Parameter(Mandatory)][version]$LatestVersion,
-		[string[]]$OutdatedVersions,
 		[string[]]$DoNotClean = @('PowerShellGet', 'Microsoft.PowerShell.PSResourceGet'),
 		[string]$PreReleaseVersion = $null
 	)
@@ -1743,7 +1741,7 @@ function Get-ManifestVersionInfo {
 	In both cases, where a version string is obtained, it utilizes the `Parse-ModuleVersion` helper to interpret the version string, identify pre-release status, and extract any pre-release labels.
 	The function is designed to be flexible and could also process data that might originate from `Import-PowerShellDataFile` if such data (a hashtable with expected keys) were piped to its `$ResData` parameter, though `Get-ModuleInfo` primarily uses `Test-ModuleManifest` output or file path analysis via `Get-ModuleformPath`.
 	.PARAMETER ResData
-	[Optional, ValueFromPipeline] An object or hashtable containing manifest data. When used with `-Quick`, this is typically the output object from `Test-ModuleManifest`. It can also be data from `Import-PowerShellDataFile`.
+	[Optional] An object or hashtable containing manifest data. When used with `-Quick`, this is typically the output object from `Test-ModuleManifest`. It can also be data from `Import-PowerShellDataFile`.
 	.PARAMETER Quick
 	[Optional] If specified, and `$ResData` is provided and is an object with expected properties (like from `Test-ModuleManifest`), the function performs a direct and simplified extraction of module metadata from `$ResData`.
 	.PARAMETER ModuleFilePath
@@ -1761,7 +1759,7 @@ function Get-ManifestVersionInfo {
 	#>
 	[CmdletBinding()]
 	param (
-		[Parameter(ValueFromPipeline)][object]$ResData,
+		[Parameter()][object]$ResData,
 		[switch]$Quick,
 		[string]$ModuleFilePath
 	)
@@ -1775,7 +1773,7 @@ function Get-ManifestVersionInfo {
 				IsPreRelease        = $module.IsPrerelease
 				PreReleaseLabel     = $module.PreReleaseLabel
 				BasePath            = $module.BasePath
-				Author              = $moduel.Author
+				Author              = $module.Author
 			}
 		}
 	}
@@ -2414,7 +2412,7 @@ $blackList = @{ #Ignored module and repo combo.
 	'Microsoft.Graph'      = @("Nuget", "NugetGallery")
 }
 $paths = $env:PSModulePath.Split(';') | Where-Object { $_ -inotmatch '.vscode' }
-$moduleInfo = Get-ModuleInfo -Paths $paths -IgnoredModules $ignoredModules
+$moduleInfo = Get-ModuleInfo -Paths $paths -Verbose -IgnoredModules $ignoredModules
 $outdated = Get-ModuleUpdateStatus -ModuleInventory $moduleInfo -TimeoutSeconds 120 -Repositories @("PSGallery", "Nuget", "NugetGallery") -MatchAuthor
 if ($outdated) {
 	$res = $outdated | Update-Modules -Clean -UseProgressBar
