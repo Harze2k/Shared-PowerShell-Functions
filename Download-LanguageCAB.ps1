@@ -1,45 +1,82 @@
-﻿<#
-.DESCRIPTION
-The Download-LanguageCAB function is a comprehensive tool for downloading and managing Windows language pack files.
-It's usefull when creating language install scripts and OS images.
-It supports downloading language-specific CAB files for Windows 10 or 11.
-The function can retrieve files from multiple UUP dump sites, convert ESD files to CAB format, and optionally remove original ESD files.
-It uses random user agents and headers to avoid detection as a bot.
-The function also handles the download and setup of necessary conversion tools (imagex, cabarc, SxSExpand) if they are not already present.
-###############################################################################################################################
-#REQUIRES custom logging function from: https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1#
-###############################################################################################################################
-#################################################################################################################################################
-#REQUIRES custom Get-RandomHeader function from: https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/Get-RandomHeader.ps1#
-#################################################################################################################################################
-.PARAMETER FolderPath
--FolderPath: Specifies the directory where the downloaded files will be saved. This parameter is mandatory.
-.PARAMETER Os
--Os: Specifies the Windows version for which to download the language files. This parameter is mandatory and accepts either "10" or "11".
-.PARAMETER Build
--Build: Allows specification of a particular Windows build number for which to download language files. If not provided, it defaults to the current system's LCU version. The build number should match the pattern ^\d{5}\.\d+$.
-.PARAMETER Language
--Language: Defines the language code for which to download files. This parameter is mandatory and should be in the format of two lowercase letters, a hyphen, and two more lowercase letters (e.g., "en-us" for English-US).
-.PARAMETER UUPUrls
--UUPUrls: An optional array of strings representing the URLs of UUP dump sites to use for downloading. It defaults to @('www.uupdump.net', 'www.uupdump.cn').
-.PARAMETER ESDToCAB
--ESDToCAB: A switch parameter that, when specified, triggers the conversion of downloaded ESD files to CAB format.
-.PARAMETER RemoveESD
--RemoveESD: A switch parameter that, when specified along with ESDToCAB, removes the original ESD files after successful conversion to CAB.
-.EXAMPLE
-Example 1: Download language files for Windows 11 (amd64)
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "11" -Language "en-us"
-Example 2: Download and convert ESD files to CAB for Windows 11
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "11" -Language "de-de" -ESDToCAB
-Example 3: Download, convert to CAB, and remove original ESD files
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "10" -Language "ja-jp" -ESDToCAB -RemoveESD
-Example 4: Use a custom UUP dump site for downloading
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "11" -Language "es-es" -UUPUrls @('custom.uupdump.site')
-Example 5: Use a custom UUP dump site for downloading and specified build.
-Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Build "26100.994" -Os "11" -Language "es-es" -UUPUrls @('custom.uupdump.site')
+﻿function Download-LanguageCAB {
+	<#
+	.SYNOPSIS
+		Downloads and manages Windows language pack CAB/ESD files for OS image creation.
+	.DESCRIPTION
+		The Download-LanguageCAB function is a comprehensive tool for downloading and managing Windows language pack files.
+		It's useful when creating language installation scripts and OS images.
+		The function supports downloading language-specific CAB/ESD files for Windows 10 or 11 from UUP dump sites.
+		Key capabilities:
+		- Downloads language packs from multiple configurable UUP dump sites
+		- Converts ESD files to CAB format for easier deployment
+		- Optionally removes original ESD files after successful conversion
+		- Uses randomized user agents and request headers to prevent bot detection
+		- Automatically manages the required conversion tools (imagex, cabarc, SxSExpand)
+		DEPENDENCIES:
+		- Requires New-Log function: https://github.com/Harze2k/Shared-PowerShell-Functions/blob/main/New-Log.ps1
+		- Requires Get-RandomHeader function: https://github.com/Harze2k/Shared-PowerShell-Functions/blob/main/Get-RandomHeader.ps1
+	.PARAMETER FolderPath
+		Specifies the directory where the downloaded files will be saved. This parameter is mandatory.
+	.PARAMETER Os
+		Specifies the Windows version for which to download the language files.
+		This parameter is mandatory and accepts either "10" or "11".
+	.PARAMETER Build
+		Allows specification of a particular Windows build number for which to download language files.
+		If not provided, it defaults to the current system's LCU version.
+		The build number should match the pattern ^\d{5}\.\d+$ (e.g., "26100.994").
+	.PARAMETER Language
+		Defines the language code for which to download files.
+		This parameter is mandatory and should be in the format of two lowercase letters,
+		a hyphen, and two more lowercase letters (e.g., "en-us" for English-US).
+	.PARAMETER UUPUrls
+		An optional array of strings representing the URLs of UUP dump sites to use for downloading.
+		It defaults to @('www.uupdump.net', 'www.uupdump.cn').
+	.PARAMETER ESDToCAB
+		A switch parameter that, when specified, triggers the conversion of downloaded ESD files to CAB format.
+	.PARAMETER RemoveESD
+		A switch parameter that, when specified along with ESDToCAB, removes the original ESD files after successful conversion to CAB.
+	.EXAMPLE
+		# Example 1: Download language files for Windows 11 using current system build
+		Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "11" -Language "en-us"
+	.EXAMPLE
+		# Example 2: Download and convert ESD files to CAB for Windows 11 with specific build
+		Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "11" -Build "26100.994" -Language "de-de" -ESDToCAB
+	.EXAMPLE
+		# Example 3: Download, convert to CAB, and remove original ESD files
+		Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "10" -Language "ja-jp" -ESDToCAB -RemoveESD
+	.EXAMPLE
+		# Example 4: Use a custom UUP dump site for downloading
+		Download-LanguageCAB -FolderPath "C:\LanguageFiles" -Os "11" -Language "es-es" -UUPUrls @('custom.uupdump.site')
+	.NOTES
+		Author: Harze2k
+		Last Updated: May 10, 2025
+		Version: 1.2 (Fixed some bugs and made sure it worked properly.)
+			-Added some sample output.
+		Sample output:
+		[2025-05-10 06:39:17.932][INFO] Creating folder: C:\Temp\LanguageCAB\22631.5189
+		[2025-05-10 06:39:18.467][SUCCESS] Got webResponse from www.uupdump.net.
+		[2025-05-10 06:39:18.469][DEBUG] Using UpdateId: dcec0074-275a-494b-bc14-fa62bc11828b
+		[2025-05-10 06:39:21.924][SUCCESS] Got links response from www.uupdump.net.
+		[2025-05-10 06:39:21.924][INFO] ========================================================
+		[2025-05-10 06:39:21.925][INFO] Start of finding and downloading language cab/esd files.
+		[2025-05-10 06:39:21.925][INFO] ========================================================
+		[2025-05-10 06:39:22.930][SUCCESS] Successfully downloaded Microsoft-Windows-Client-LanguagePack-Package_sv-se-amd64-sv-se-22631.5189.esd with HttpClient.
+		[2025-05-10 06:39:23.485][SUCCESS] Successfully downloaded Microsoft-Windows-LanguageFeatures-Basic-sv-se-Package-amd64-22631.5189.cab with HttpClient.
+		[2025-05-10 06:39:23.966][SUCCESS] Successfully downloaded Microsoft-Windows-LanguageFeatures-Handwriting-sv-se-Package-amd64-22631.5189.cab with HttpClient.
+		[2025-05-10 06:39:24.196][SUCCESS] Successfully downloaded Microsoft-Windows-LanguageFeatures-OCR-sv-se-Package-amd64-22631.5189.cab with HttpClient.
+		[2025-05-10 06:39:24.662][SUCCESS] Successfully downloaded Microsoft-Windows-LanguageFeatures-TextToSpeech-sv-se-Package-amd64-22631.5189.cab with HttpClient.
+		[2025-05-10 06:39:24.663][DEBUG] Downloading ESD2CAB cmd tool.
+		[2025-05-10 06:39:31.308][SUCCESS] Successfully extracted esd file Microsoft-Windows-Client-LanguagePack-Package_sv-se-amd64-sv-se-22631.5189.esd with ImageX.
+		[2025-05-10 06:39:31.309][INFO] Next step (converting) will take some time..
+		[2025-05-10 06:40:47.103][SUCCESS] Successfully converted all files in Microsoft-Windows-Client-LanguagePack-Package_sv-se-amd64-sv-se-22631.5189.esd with SxSExpand.
+		[2025-05-10 06:40:47.104][INFO] Next step (adding to cab archive) will take some time..
+		[2025-05-10 06:41:29.805][SUCCESS] Successfully added all files to Microsoft-Windows-Client-LanguagePack-Package_sv-se-amd64-sv-se-22631.5189.cab with Cabarc.
+		[2025-05-10 06:41:29.806][INFO] ==========================================================
+		[2025-05-10 06:41:29.806][INFO] Successfully expanded, converted and created the cab file.
+		[2025-05-10 06:41:29.806][INFO] ==========================================================
+		[2025-05-10 06:41:35.714][SUCCESS] All downloads and conversions completed.
 #>
-function Download-LanguageCAB {
-    [CmdletBinding()]
+	[CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipeline)][ValidateNotNullOrEmpty()][string]$FolderPath,
         [Parameter(Mandatory)][ValidateSet("10", "11")][string]$Os,
@@ -61,27 +98,15 @@ function Download-LanguageCAB {
                 [string]$fileName = $(Split-Path $outputFile -Leaf)
             }
             try {
-                $webClient = Get-RandomHeader -GetWebClient
-                $webClient.DownloadFile($downloadLink, $outputFile)
-                $webClient.Dispose()
-                New-Log "Successfully downloaded $fileName with WebClient." -Level SUCCESS
+                $httpClient = Get-RandomHeader -GetHTTPClient -ErrorAction Stop
+                [System.IO.File]::WriteAllBytes($outputFile, (($httpClient.SendAsync((New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Get, $downloadLink)))).Result).Content.ReadAsByteArrayAsync().Result)
+                $httpClient.Dispose()
+                New-Log "Successfully downloaded $fileName with HttpClient." -Level SUCCESS
                 return $true
             }
             catch {
-                New-Log "Failed to download $fileName with WebClient." -Level ERROR
-                New-Log "Will try using HttpClient instead.." -Level INFO
-                try {
-                    $httpClient = Get-RandomHeader -GetHTTPClient
-                    [System.IO.File]::WriteAllBytes($outputFile, (($httpClient.SendAsync((New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Get, $downloadLink)))).Result).Content.ReadAsByteArrayAsync().Result)
-                    $httpClient.Dispose()
-                    New-Log "Successfully downloaded $fileName with HttpClient." -Level SUCCESS
-                    return $true
-                }
-                catch {
-                    New-Log "Failed to download $fileName with HttpClient." -Level ERROR
-                    New-Log "Will abort this download and return false." -Level WARNING
-                    return $false
-                }
+                New-Log "Failed to download $fileName with HttpClient." -Level ERROR
+                return $false
             }
         }
         function Convert-EsdToCab {
@@ -159,11 +184,11 @@ function Download-LanguageCAB {
         ##############################################################################################################################
         #Calling custom logging function from: https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1#
         ##############################################################################################################################
-        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/refs/heads/main/New-Log.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
         ################################################################################################################################################
         #Calling custom Get-RandomHeader function from: https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/Get-RandomHeader.ps1#
         ################################################################################################################################################
-        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/Get-RandomHeader.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/refs/heads/main/Get-RandomHeader.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
         try {
             if (-not (Test-Path "$folderPath\$build")) {
                 New-Log "Creating folder: $folderPath\$build"
@@ -275,19 +300,17 @@ function Download-LanguageCAB {
                 return
             }
             if ($RemoveESD.IsPresent) {
-                Remove-Item -Path ".\$pack.esd" -Force -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
                 Convert-EsdToCab -EsdFile $esdFile.Name -WorkingDir "$folderPath\$build" -ImageX $imageX -Cabarc $cabarc -Sxs $sxs -RemoveESD
             }
             else {
                 Convert-EsdToCab -EsdFile $esdFile.Name -WorkingDir "$folderPath\$build" -ImageX $imageX -Cabarc $cabarc -Sxs $sxs
             }
-            New-Log -Message "All downloads andconversions completed." -Level SUCCESS
+            New-Log -Message "All downloads and conversions completed." -Level SUCCESS
         }
         elseif ($ESDToCAB -and !($downloadLinks)) {
             New-Log "Either the download of the CABs failed or the esd to cab tool failed to download. Will abort." -Level WARNING
         }
     }
 }
-$currentBuild = ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'CurrentBuild').CurrentBuild) + '.' + ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'UBR').UBR)
-#$build = '26100.2314'
-Download-LanguageCAB -FolderPath "C:\Temp\LanguageCAB" -Os "11" -Language "sv-se" -RemoveESD -ESDToCAB -UUPUrls @('www.uupdump.net', 'www.uupdump.cn') -Build $currentBuild
+#$currentBuild = ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'CurrentBuild').CurrentBuild) + '.' + ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name 'UBR').UBR)
+#Download-LanguageCAB -FolderPath "C:\Temp\LanguageCAB" -Os "11" -Language "sv-se" -RemoveESD -ESDToCAB -UUPUrls @('www.uupdump.net', 'www.uupdump.cn') -Build $currentBuild
