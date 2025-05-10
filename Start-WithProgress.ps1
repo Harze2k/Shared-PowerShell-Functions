@@ -96,7 +96,7 @@
 	.NOTES
 		AUTHOR: Harze2k
 		Date:   2025-05-10
-		VERSION: 2.7 (First public release)
+		VERSION: 2.8 (Fixed so that -FilePath is not required when using -JustWait)
 
 		-Requires a `New-Log` function to be defined in the scope where Start-WithProgress is called.
 
@@ -186,6 +186,9 @@
 		Write-Host -NoNewline ("{0:0.0}%" -f $percentage)
 		Write-Host -NoNewline (" Elapsed: {0:hh\:mm\:ss} (Remaining: {1:hh\:mm\:ss})" -f $TimeElapsed, $RemainingTime)
 		Write-Host -NoNewline "     "
+	}
+	if ($JustWait) {
+		$Condition = { $false }
 	}
 	#endregion Write-ProgressBar
 	# Create a hashtable to track temporary resources for cleanup
