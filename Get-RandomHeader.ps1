@@ -1,24 +1,25 @@
-<#
-.DESCRIPTION
-	The Get-RandomHeader function is a versatile utility designed to generate randomized HTTP headers for web requests in PowerShell scripts. It creates a set of headers that mimic real browser behavior, helping to avoid detection as an automated script. The function supports various use cases, including generating headers for direct use, or creating pre-configured HttpClient object.
-	The function attempts to determine the user's country code using an IP geolocation service, falling back to a random country if the service is unavailable. It then uses this information to set appropriate language headers. The function generates a wide variety of realistic user agents, referrers, and other HTTP headers to simulate different browsers and devices.
-.PARAMETER GetHTTPClient
-	-GetHTTPClient: When specified, returns a System.Net.Http.HttpClient object with the random headers pre-configured.
-.EXAMPLE
-	Example 1: Get a hashtable of random headers
-	$header = Get-RandomHeader
-	$header # Is compatible with Invoke-RestMethod and Invoke-WebRequest.
-	Example 2: Get a pre-configured HttpClient object
-	$httpClient = Get-RandomHeader -GetHTTPClient
-.NOTES
-	Author: Harze2k
-	Date:   2025-04-27 (Updated)
-    Version: 1.2 (Re-released.)
-	The function includes a wide range of user agents, referrers, and accept headers to provide variety in the generated headers. It also adapts the language settings based on the detected or randomly selected country code.
-	The function handles errors gracefully, particularly when attempting to determine the user's location. If the IP geolocation service is unavailable, it falls back to selecting a random country code from a predefined list.
-	This function is particularly useful for web scraping tasks, API interactions, or any scenario where simulating a real browser's behavior is beneficial to avoid rate limiting or blocking by web servers.
-#>
 function Get-RandomHeader {
+	<#
+	.DESCRIPTION
+		The Get-RandomHeader function is a versatile utility designed to generate randomized HTTP headers for web requests in PowerShell scripts. It creates a set of headers that mimic real browser behavior, helping to avoid detection as an automated script. The function supports various use cases, including generating headers for direct use, or creating pre-configured HttpClient object.
+		The function attempts to determine the user's country code using an IP geolocation service, falling back to a random country if the service is unavailable. It then uses this information to set appropriate language headers. The function generates a wide variety of realistic user agents, referrers, and other HTTP headers to simulate different browsers and devices.
+	.PARAMETER GetHTTPClient
+		-GetHTTPClient: When specified, returns a System.Net.Http.HttpClient object with the random headers pre-configured.
+	.EXAMPLE
+		Example 1: Get a hashtable of random headers
+		$header = Get-RandomHeader
+		$header # Is compatible with Invoke-RestMethod and Invoke-WebRequest.
+		Example 2: Get a pre-configured HttpClient object
+		$httpClient = Get-RandomHeader -GetHTTPClient
+	.NOTES
+		Author: Harze2k
+		Date:   2025-05-15
+		Version: 1.3 (Small layout fixes.)
+
+		The function includes a wide range of user agents, referrers, and accept headers to provide variety in the generated headers. It also adapts the language settings based on the detected or randomly selected country code.
+		The function handles errors gracefully, particularly when attempting to determine the user's location. If the IP geolocation service is unavailable, it falls back to selecting a random country code from a predefined list.
+		This function is particularly useful for web scraping tasks, API interactions, or any scenario where simulating a real browser's behavior is beneficial to avoid rate limiting or blocking by web servers.
+	#>
 	[CmdletBinding()]
 	param (
 		[switch]$GetHTTPClient
@@ -67,14 +68,14 @@ function Get-RandomHeader {
 		'Accept-Language'    = $acceptLanguage
 		'Referer'            = $referrer | Get-Random
 		'Sec-Ch-Ua'          = Get-Random -InputObject @('"Chromium";v="117", "Not;A=Brand";v="8"', '"Microsoft Edge";v="116", "Not)A;Brand";v="24", "Chromium";v="116"')
-		'Sec-Ch-Ua-Mobile'   = '?0' # Typically ?0 for desktop, ?1 for mobile
+		'Sec-Ch-Ua-Mobile'   = '?0'
 		'Sec-Ch-Ua-Platform' = Get-Random -InputObject @('"Windows"', '"macOS"', '"Linux"')
 	}
 	try {
 		if ($GetHTTPClient) {
-			$clientName = "RandomHTTPClient$(Get-Random -Minimum 100 -Maximum 999)" # Create unique variable name
+			$clientName = "RandomHTTPClient$(Get-Random -Minimum 100 -Maximum 999)"
 			$newClient = [System.Net.Http.HttpClient]::new()
-			Set-Variable -Name $clientName -Value $newClient # Store client in a dynamically named variable
+			Set-Variable -Name $clientName -Value $newClient
 			Write-Verbose "Creating new HttpClient instance named '$clientName'"
 			foreach ($key in $Header.Keys) {
 				Write-Verbose "Adding header to '$clientName': $key = $($Header[$key])"
@@ -86,10 +87,10 @@ function Get-RandomHeader {
 				}
 			}
 			Write-Verbose "Returning HttpClient instance stored in variable '$clientName'."
-			return $newClient # Return the client object directly
+			return $newClient
 		}
 		else {
-			return $Header # Return the hashtable
+			return $Header
 		}
 	}
 	catch {
