@@ -4,8 +4,8 @@
 #region Check-PSResourceRepository
 <#
 Author: Harze2k
-Date:   2025-05-10
-Version: 3.5 (Bug fix edition.)
+Date:   2025-05-15
+Version: 3.6 (Output fix.)
 	-Fixed PreRelease logic in several functions.
 	-Now we try to parse the PreRelease version also from .XML files.
 	-Fixed output from several functions to be relevant and less spammy.
@@ -650,7 +650,7 @@ function Get-ModuleInfo {
 	New-Log "Phase 3 (Aggregation) complete in $($aggregationDuration.ToString("g"))."
 	$totalFunctionDuration = (Get-Date) - $fileDiscoveryStartTime # Start from very beginning of Phase 1
 	New-Log "Get-ModuleInfo completed. Total duration: $($totalFunctionDuration.ToString("g")). Found $($finalSortedModules.Keys.Count) modules." -Level SUCCESS
-	Return $finalSortedModules
+	return $finalSortedModules
 }
 #endregion Get-ModuleInfo
 #region Get-ModuleUpdateStatus
@@ -785,6 +785,7 @@ function Get-ModuleUpdateStatus {
 	}
 	New-Log "Prepared $validModuleCountForProcessing modules from local inventory." -Level VERBOSE
 	# --- STAGE 1: Pre-fetch Online Module Versions ---
+	# --- STAGE 1: Pre-fetch Online Module Versions ---
 	New-Log "Starting online version pre-fetching for up to $($moduleDataArray.Count) modules..."
 	$overallOperationStartTime = Get-Date
 	$onlineModuleVersionsCache = [System.Collections.Concurrent.ConcurrentDictionary[string, object]]::new() # Thread-safe for direct assignment
@@ -828,6 +829,7 @@ function Get-ModuleUpdateStatus {
 			Skipped       = $false
 		}
 	}
+
 	foreach ($moduleEntry in $moduleDataArray) {
 		$moduleNameToFetch = $moduleEntry.ModuleName
 		$currentRepositories = $Repositories # Start with all specified function repos
@@ -865,19 +867,86 @@ function Get-ModuleUpdateStatus {
 			Get-Job -State Running | Where-Object { $_.Id -in ($preFetchJobs.Id) } | Wait-Job -Any -Timeout ($TimeoutSeconds * 2) | Out-Null # Wait for any to free up a slot
 		}
 	}
+
 	New-Log "Waiting for $($preFetchJobs.Count) pre-fetch jobs to complete (Timeout per job: ${TimeoutSeconds}s)..."
-	$prefetchSync = [System.Collections.Hashtable]::Synchronized(@{ timeouts = 0 })
+
+	# ===== BEGIN PROGRESS TRACKING IMPLEMENTATION =====
+	# Create a variable to track total jobs
+	$totalJobs = $preFetchJobs.Count
+
+	# Create and configure the timer
+	$timer = New-Object System.Timers.Timer
+	$timer.Interval = 5000  # Check progress every 5 seconds
+	$timer.AutoReset = $true
+
+	# Register the event that will run each time the timer elapses
+	$eventJob = Register-ObjectEvent -InputObject $timer -EventName Elapsed -Action {
+		# Get fresh counts of job states
+		$completedJobs = (Get-Job | Where-Object { $_.Id -in $using:preFetchJobs.Id -and $_.State -eq "Completed" }).Count
+		$runningJobs = (Get-Job | Where-Object { $_.Id -in $using:preFetchJobs.Id -and $_.State -eq "Running" }).Count
+		$failedJobs = (Get-Job | Where-Object { $_.Id -in $using:preFetchJobs.Id -and $_.State -eq "Failed" }).Count
+		$pendingJobs = $using:totalJobs - $completedJobs - $runningJobs - $failedJobs
+
+		# Calculate percentage complete
+		$percentComplete = [math]::Round(($completedJobs / $using:totalJobs) * 100, 1)
+
+		# Use the existing New-Log function to maintain consistent logging
+		New-Log "Pre-fetch progress: $completedJobs/$using:totalJobs completed ($percentComplete%), $runningJobs running, $failedJobs failed, $pendingJobs pending" -Level INFO
+	}
+
+	# Start the timer
+	$timer.Start()
+	# ===== END PROGRESS TRACKING IMPLEMENTATION =====
+	# Initialize counters for progress tracking
+	New-Log "Waiting for $($preFetchJobs.Count) pre-fetch jobs to complete (Timeout per job: ${TimeoutSeconds}s)..."
+
+	# Initialize counters for progress tracking properly with all required values
+	$prefetchSync = [System.Collections.Hashtable]::Synchronized(@{
+			timeouts  = 0
+			completed = 0
+			total     = $preFetchJobs.Count  # Ensure total is set correctly
+		})
+
+	# Make sure total is not zero to avoid division errors
+	if ($prefetchSync.total -le 0) {
+		$prefetchSync.total = 1  # Safety check to avoid division by zero
+	}
+
+	# Process each job with immediate progress reporting
 	foreach ($jobInstance in $preFetchJobs) {
 		$jobModuleName = $jobInstance.PSObject.Properties["ModuleNameForJob"].Value
 		$waitSuccess = $jobInstance | Wait-Job -Timeout $TimeoutSeconds -ErrorAction SilentlyContinue
+
+		# Update progress after each job completes with safety check
+		$currentCompleted = [int]($prefetchSync.completed) + 1
+		$prefetchSync.completed = $currentCompleted
+
+		# Safe percentage calculation - avoid division by zero
+		if ($prefetchSync.total -gt 0) {
+			$percentComplete = [math]::Round(($currentCompleted / $prefetchSync.total) * 100, 1)
+		}
+		else {
+			$percentComplete = 100  # Default if total is somehow zero
+		}
+
+		# Report progress every 10 jobs or at 25%, 50%, 75%, 100% milestones
+		if ($currentCompleted % 10 -eq 0 -or $percentComplete % 25 -eq 0) {
+			$remaining = $prefetchSync.total - $currentCompleted
+			$runningJobs = (Get-Job | Where-Object { $_.Id -in $preFetchJobs.Id -and $_.State -eq "Running" }).Count
+			New-Log "Pre-fetch progress: $currentCompleted/$($prefetchSync.total) completed ($percentComplete%), $remaining remaining, $runningJobs still running" -Level INFO
+		}
+
+		# Rest of your existing job processing code
 		$jobOutput = $null
-		$jobErrors = $jobInstance.Error # Capture errors before Receive-Job might clear them for some job types
+		$jobErrors = $jobInstance.Error
 		try {
-			$jobOutput = $jobInstance | Receive-Job -ErrorAction SilentlyContinue -Wait # Ensure it attempts to get all data
+			$jobOutput = $jobInstance | Receive-Job -ErrorAction SilentlyContinue -Wait
 		}
 		catch {
 			New-Log "[$jobModuleName] Pre-fetch: Error during Receive-Job: $($_.Exception.Message)" -Level WARNING
 		}
+
+		# Your existing error handling code...
 		if (-not $waitSuccess -and $jobInstance.State -eq 'Running') {
 			New-Log "[$jobModuleName] Pre-fetch job timed out." -Level WARNING
 			$prefetchSync.timeouts++
@@ -897,9 +966,22 @@ function Get-ModuleUpdateStatus {
 		}
 		Remove-Job $jobInstance -ErrorAction SilentlyContinue
 	}
+
+	# Final progress report
+	New-Log "Pre-fetch complete: $($prefetchSync.completed)/$($prefetchSync.total) processed, $($prefetchSync.timeouts) timeouts" -Level INFO
+
+	# ===== BEGIN CLEANUP FOR PROGRESS TRACKING =====
+	# Stop and clean up the timer
+	$timer.Stop()
+	$timer.Dispose()
+	Unregister-Event -SourceIdentifier $eventJob.Name
+	Remove-Job -Job $eventJob -Force
+	# ===== END CLEANUP FOR PROGRESS TRACKING =====
+
 	New-Log "Online version pre-fetching complete. Cached data for $($onlineModuleVersionsCache.Count) modules. Timeouts: $($prefetchSync.timeouts)"
 	$preFetchDuration = (Get-Date) - $overallOperationStartTime
 	New-Log "Pre-fetching (Stage 1) took: $($preFetchDuration.ToString("g"))"
+
 	# Ensure all modules in $moduleDataArray have an entry in $onlineModuleVersionsCache
 	foreach ($moduleEntry in $moduleDataArray) {
 		if (-not $onlineModuleVersionsCache.ContainsKey($moduleEntry.ModuleName)) {
@@ -909,6 +991,7 @@ function Get-ModuleUpdateStatus {
 			}
 		}
 	}
+
 	# --- STAGE 2: Parallel Processing with Pre-fetched Data ---
 	$results = [System.Collections.Concurrent.ConcurrentBag[object]]::new()
 	$sync = [System.Collections.Hashtable]::Synchronized(@{
@@ -1226,9 +1309,9 @@ function Update-Modules {
 		$total = $batchModules.Count
 		$current = 0
 		foreach ($module in $batchModules) {
-			$current++
 			$moduleName = $module.ModuleName
-			New-Log "[$moduleName] Starting update process for $total modules."
+			New-Log "[$moduleName] Starting update process for $($total-$current) modules."
+			$current++
 			[string]$targetVersionString = $($module.LatestVersion)
 			[version]$latestVer = $null # This will hold the base [version] object
 			# Try parsing the target string
@@ -2218,7 +2301,7 @@ function Get-ModuleInfoFromXml {
 		# Determine if any XML flag explicitly says it's a prerelease
 		$isPrereleaseFromXmlFlag = $false
 		if (($prereleaseBoolText -is [string] -and $prereleaseBoolText.ToLowerInvariant() -eq 'true') -or
-            ($prereleaseStringText -is [string] -and $prereleaseStringText.ToLowerInvariant() -eq 'true')) {
+			($prereleaseStringText -is [string] -and $prereleaseStringText.ToLowerInvariant() -eq 'true')) {
 			$isPrereleaseFromXmlFlag = $true
 			New-Log "XML: An explicit IsPrerelease flag in XML is true (Bool: '$prereleaseBoolText', String: '$prereleaseStringText')." -Level VERBOSE
 		}
@@ -2492,13 +2575,13 @@ function Compare-ModuleVersion {
 <#
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
 Check-PSResourceRepository -ImportDependencies
-Import-Module -Name ThreadJob -Global -Force
+Import-Module -Name ThreadJob -Force
 $ignoredModules = @('Example2.Diagnostics') #Fully ignored modules
 $blackList = @{ #Ignored module and repo combo.
 	'Microsoft.Graph.Beta' = 'NuGetGallery'
 	'Microsoft.Graph'      = @("Nuget", "NugetGallery")
 }
-$paths = $env:PSModulePath.Split(';') | Where-Object { $_ -inotmatch '.vscode' }
+$paths = $env:PSModulePath.Split(';') | Where-Object { $_ -notmatch '.vscode' -and $_ -notmatch 'System32' }
 $moduleInfo = Get-ModuleInfo -Paths $paths -IgnoredModules $ignoredModules
 $outdated = Get-ModuleUpdateStatus -ModuleInventory $moduleInfo -TimeoutSeconds 120 -Repositories @("PSGallery", "Nuget", "NugetGallery") -MatchAuthor -BlackList $blackList
 if ($outdated) {
