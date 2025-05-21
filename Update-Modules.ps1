@@ -4,13 +4,14 @@
 #region Check-PSResourceRepository
 <#
 Author: Harze2k
-Date:   2025-05-15
-Version: 3.6 (Output fix.)
+Date:   2025-05-21
+Version: 3.7 (10x speed increase!)
+	-Fixed a loop issue that caused the Find-Module to slow down.
+	---Older ---
 	-Fixed PreRelease logic in several functions.
 	-Now we try to parse the PreRelease version also from .XML files.
 	-Fixed output from several functions to be relevant and less spammy.
 	-Fixed a typo that made the -MatchAutor not work.
-	---Older ---
 	-Added more Parallel Processing
 	-Added ThreadJobs
 	-Over 150% faster
@@ -19,53 +20,61 @@ Version: 3.6 (Output fix.)
 	-Progress reporting while parallel jobs.
 Sample output:
 ...
-[2025-05-09 23:42:02.076][SUCCESS] [WinHttpProxy] Successfully found module info from the [.PSD1] file. Version [1.0.0.0]
-[2025-05-09 23:42:02.095][SUCCESS] [StorageBusCache] Successfully found module info from the [.PSD1] file. Version [1.0.0.0]
-[2025-05-09 23:42:02.097][INFO] Phase 2 complete. Parallel processing took 0:00:04,1781914. Collected 373 raw entries.
-[2025-05-09 23:42:02.098][INFO] Phase 3: Starting post-processing and aggregation...
-[2025-05-09 23:42:02.102][INFO] Reduced to 336 unique entries after initial grouping.
-[2025-05-09 23:42:02.170][INFO] Phase 3 (Aggregation) complete in 0:00:00,0705118.
-[2025-05-09 23:42:02.171][SUCCESS] Get-ModuleInfo completed. Total duration: 0:00:04,3488167. Found 190 modules.
-[2025-05-09 23:42:02.199][INFO] Starting online version pre-fetching for up to 190 modules...
-[2025-05-09 23:42:04.334][INFO] Waiting for 190 pre-fetch jobs to complete (Timeout per job: 120s)...
-[2025-05-09 23:42:09.951][INFO] Online version pre-fetching complete. Cached data for 190 modules. Timeouts: 0
-[2025-05-09 23:42:09.952][INFO] Pre-fetching (Stage 1) took: 0:00:07,7526502
-[2025-05-09 23:42:09.956][SUCCESS] Starting parallel update comparison for 190 modules (Throttle: 64)...
-[2025-05-09 23:42:10.068][INFO] Progress: 5% (13/190) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:01
-[2025-05-09 23:42:10.068][INFO] Progress: 4% (14/190) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:01
-[2025-05-09 23:42:10.128][INFO] Progress: 15% (33/190) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.150][INFO] Progress: 21% (42/190) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.170][INFO] Progress: 26% (53/190) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.190][SUCCESS] [Maester] Update found: Local '1.0.82-preview' -> Online '1.0.85-preview'. 1 outdated paths.
-[2025-05-09 23:42:10.193][INFO] Progress: 31% (63/190) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.285][INFO] Progress: 52% (103/190) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.285][INFO] Progress: 53% (103/190) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.323][INFO] Progress: 63% (122/190) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.452][INFO] Progress: 94% (186/190) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.464][INFO] Progress: 99% (190/190) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.465][INFO] Progress: 100% (190/190) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-09 23:42:10.466][INFO] Pre-fetching (Stage 1) duration: 0:00:07,7526502
-[2025-05-09 23:42:10.467][INFO] Comparison (Stage 2) duration: 0:00:00,5138021
-[2025-05-09 23:42:10.468][SUCCESS] Completed check of 190 modules in 0:00:08,2664523. Found 1 modules needing updates.
-[2025-05-09 23:42:24.765][INFO] [Maester] Starting update process for 1 modules.
-[2025-05-09 23:44:55.626][SUCCESS] [Maester] Successfully saved version [1.0.85-preview] via Save-PSResource. Expected path: 'C:\Program Files\PowerShell\Modules\Maester\1.0.85-preview'
-[2025-05-09 23:45:48.324][SUCCESS] [Maester] Successfully saved version [1.0.85-preview] via Save-PSResource. Expected path: 'C:\Program Files\PowerShell\Modules\Maester\1.0.85'
-[2025-05-09 23:46:01.341][SUCCESS] [Maester] Successfully updated to version [1.0.85-preview] for all target destinations (C:\Program Files\PowerShell\Modules\Maester).
-[2025-05-09 23:46:29.578][INFO] [Maester] Update successful to paths: C:\Program Files\PowerShell\Modules\Maester. Proceeding with cleaning old versions...
-[2025-05-09 23:47:26.510][DEBUG] [Maester] Found potential old version folder: 'C:\Program Files\PowerShell\Modules\Maester\1.0.82'. Attempting removal...
-[2025-05-09 23:47:40.500][SUCCESS] [Maester] Successfully removed 'C:\Program Files\PowerShell\Modules\Maester\1.0.82' (verified after Uninstall-PSResource attempt).
-[2025-05-09 23:47:49.221][DEBUG] [Maester] Finished cleaning attempt. Removed 1 items.
-[2025-05-09 23:47:57.621][SUCCESS] [Maester] Successfully cleaned 1 old items: C:\Program Files\PowerShell\Modules\Maester\1.0.82
-[2025-05-09 23:47:59.787][SUCCESS] Update process finished for 1 modules. Successful Updates: 1, Failed/Partial Updates: 0.
-[2025-05-09 23:48:04.483][DEBUG] Cleaning Summary: 0 modules had old versions successfully removed. 0 modules had cleaning attempted but no items removed. 0 modules had cleaning skipped (ShouldProcess/Failure).
-
-ModuleName           : Maester
-NewVersionPreRelease : 1.0.85-preview
-NewVersion           : 1.0.85
-UpdatedPaths         : {C:\Program Files\PowerShell\Modules\Maester}
+[2025-05-21 14:54:15.769][SUCCESS] [PowerShellGet] Successfully found module info from the [.PSD1] file. Version [2.2.5]
+[2025-05-21 14:54:15.772][SUCCESS] [Microsoft.PowerShell.Operation.Validation] Successfully found module info from the [.PSD1] file. Version [1.0.1]
+[2025-05-21 14:54:15.775][INFO] Phase 2 complete. Parallel processing took 0:00:02,9742846. Collected 265 raw entries.
+[2025-05-21 14:54:15.775][INFO] Phase 3: Starting post-processing and aggregation...
+[2025-05-21 14:54:15.782][INFO] Reduced to 229 unique entries after initial grouping.
+[2025-05-21 14:54:15.823][INFO] Phase 3 (Aggregation) complete in 0:00:00,0467479.
+[2025-05-21 14:54:15.824][SUCCESS] Get-ModuleInfo completed. Total duration: 0:00:03,0958568. Found 110 modules.
+[2025-05-21 14:54:15.849][INFO] Starting online version pre-fetching for up to 110 modules...
+[2025-05-21 14:54:15.893][INFO] Waiting for 110 pre-fetch jobs to complete (Timeout per job: 120s)...
+[2025-05-21 14:54:16.431][INFO] Pre-fetch progress: 7/110 completed (6.4%), 30 still running
+[2025-05-21 14:54:16.711][INFO] Pre-fetch progress: 19/110 completed (17.3%), 34 still running
+[2025-05-21 14:54:16.966][INFO] Pre-fetch progress: 33/110 completed (30%), 36 still running
+[2025-05-21 14:54:17.252][INFO] Pre-fetch progress: 46/110 completed (41.8%), 40 still running
+[2025-05-21 14:54:17.783][INFO] Pre-fetch progress: 68/110 completed (61.8%), 42 still running
+[2025-05-21 14:54:18.038][INFO] Pre-fetch progress: 90/110 completed (81.8%), 20 still running
+[2025-05-21 14:54:18.795][INFO] Pre-fetch progress: 103/110 completed (93.6%), 7 still running
+[2025-05-21 14:54:19.810][INFO] Pre-fetch progress: 110/110 completed (100%), 0 still running
+[2025-05-21 14:54:19.820][INFO] Pre-fetch complete: 110/110 processed, 0 timeouts
+[2025-05-21 14:54:19.820][INFO] Online version pre-fetching complete. Cached data for 110 modules. Timeouts: 0
+[2025-05-21 14:54:19.821][INFO] Pre-fetching (Stage 1) took: 0:00:03,9710021
+[2025-05-21 14:54:19.824][SUCCESS] Starting parallel update comparison for 110 modules (Throttle: 64)...
+[2025-05-21 14:54:19.905][INFO] Progress: 5% (8/110) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:01
+[2025-05-21 14:54:19.905][INFO] Progress: 5% (8/110) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:01
+[2025-05-21 14:54:19.930][INFO] Progress: 11% (12/110) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:19.934][SUCCESS] [BurntToast] Update found: Local '0.8.5' -> Online '1.0.0-Preview2'. 1 outdated paths.
+[2025-05-21 14:54:19.937][INFO] Progress: 15% (20/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:19.957][INFO] Progress: 19% (26/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:19.957][INFO] Progress: 20% (26/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:19.958][INFO] Progress: 22% (27/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:19.958][INFO] Progress: 21% (27/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:19.979][INFO] Progress: 26% (33/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:19.999][INFO] Progress: 32% (37/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.022][INFO] Progress: 43% (51/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.076][INFO] Progress: 65% (73/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.095][INFO] Progress: 69% (81/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.095][INFO] Progress: 70% (81/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.095][INFO] Progress: 71% (81/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.112][INFO] Progress: 75% (86/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.134][INFO] Progress: 82% (91/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.139][INFO] Progress: 86% (99/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.161][INFO] Progress: 97% (109/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
+[2025-05-21 14:54:20.162][INFO] Pre-fetching (Stage 1) duration: 0:00:03,9710021
+[2025-05-21 14:54:20.163][INFO] Comparison (Stage 2) duration: 0:00:00,3410224
+[2025-05-21 14:54:20.164][SUCCESS] Completed check of 110 modules in 0:00:04,3120245. Found 1 modules needing updates.
+[2025-05-21 14:54:20.168][INFO] [BurntToast] Starting update process for 1 modules.
+[2025-05-21 14:54:22.290][SUCCESS] [BurntToast] Successfully saved version [1.0.0-Preview2] via Save-PSResource. Expected path: 'C:\Program Files\PowerShell\Modules\BurntToast\1.0.0'
+[2025-05-21 14:54:22.301][SUCCESS] [BurntToast] Successfully updated to version [1.0.0-Preview2] for all target destinations (C:\Program Files\PowerShell\Modules\BurntToast).
+[2025-05-21 14:54:22.311][SUCCESS] Update process finished for 1 modules. Successful Updates: 1, Failed/Partial Updates: 0.
+ModuleName           : BurntToast
+NewVersionPreRelease : 1.0.0-Preview2
+NewVersion           : 1.0.0
+UpdatedPaths         : {C:\Program Files\PowerShell\Modules\BurntToast}
 FailedPaths          : {}
 OverallSuccess       : True
-CleanedPaths         : C:\Program Files\PowerShell\Modules\Maester\1.0.82
+CleanedPaths         :
 #>
 function Check-PSResourceRepository {
 	<#
@@ -690,6 +699,8 @@ function Get-ModuleUpdateStatus {
 	The maximum number of parallel jobs to run simultaneously. This applies to both the pre-fetching stage (`Start-ThreadJob`'s internal throttle) and the comparison stage (`ForEach-Object -Parallel`). Defaults to `([System.Environment]::ProcessorCount * 2)`.
 	.PARAMETER TimeoutSeconds
 	The maximum time in seconds that each individual `Find-Module` job in the pre-fetching stage is allowed to run before being timed out. Defaults to 30 seconds.
+	.PARAMETER FindModuleTimeoutSeconds
+	The maximum time in seconds that each `Find-Module` command within a job is allowed to run before being timed out. Defaults to 10 seconds.
 	.PARAMETER BlackList
 	A hashtable used to exclude specific modules from update checks or to exclude them from being checked against certain repositories.
 	- To completely exclude a module: `@{ 'ModuleName' = '*' }`
@@ -735,9 +746,10 @@ function Get-ModuleUpdateStatus {
 	[CmdletBinding()]
 	param (
 		[Parameter(Mandatory)][hashtable]$ModuleInventory,
-		[string[]]$Repositories = @('PSGallery', 'NuGet'), # Ensure 'NuGet' is a valid registered PS Repository name or remove it
+		[string[]]$Repositories = @('PSGallery', 'NuGet'),
 		[int]$ThrottleLimit = ([Environment]::ProcessorCount * 2),
-		[ValidateRange(1, 3600)][int]$TimeoutSeconds = 30, # Increased max timeout range
+		[ValidateRange(1, 3600)][int]$TimeoutSeconds = 30, # Job timeout
+		[ValidateRange(1, 60)][int]$FindModuleTimeoutSeconds = 10, # Internal timeout for Find-Module
 		[hashtable]$BlackList = @{},
 		[switch]$MatchAuthor
 	)
@@ -784,16 +796,16 @@ function Get-ModuleUpdateStatus {
 		return @()
 	}
 	New-Log "Prepared $validModuleCountForProcessing modules from local inventory." -Level VERBOSE
-	# --- STAGE 1: Pre-fetch Online Module Versions ---
-	# --- STAGE 1: Pre-fetch Online Module Versions ---
+	# --- STAGE 1: Pre-fetch Online Module Versions (Optimized) ---
 	New-Log "Starting online version pre-fetching for up to $($moduleDataArray.Count) modules..."
 	$overallOperationStartTime = Get-Date
 	$onlineModuleVersionsCache = [System.Collections.Concurrent.ConcurrentDictionary[string, object]]::new() # Thread-safe for direct assignment
-	$preFetchJobs = [System.Collections.Generic.List[System.Management.Automation.Job]]::new()
+	# Script block to find module versions - search repositories one at a time
 	$findModuleScriptBlock = {
 		param(
 			$moduleNameToFetch,
-			$repositoriesForJob
+			$repositoriesForJob,
+			$findModuleTimeoutSeconds
 		)
 		# Ensure PSResourceGet cmdlets are available in the thread
 		# Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction SilentlyContinue -Force
@@ -802,24 +814,55 @@ function Get-ModuleUpdateStatus {
 		$stableResult = $null
 		$prereleaseResult = $null
 		$fetchError = $null
-		try {
-			$stableModuleInfo = Find-Module -Name $moduleNameToFetch -Repository $repositoriesForJob -ErrorAction SilentlyContinue -Verbose:$false |
-				Sort-Object -Property Version -Descending |
-				Select-Object -First 1
-			if ($stableModuleInfo) { $stableResult = $stableModuleInfo }
+		# Check each repository one at a time to stop once we find a match
+		foreach ($repo in $repositoriesForJob) {
+			try {
+				$stableModuleFromRepo = Find-Module -Name $moduleNameToFetch -Repository $repo -ErrorAction SilentlyContinue -Verbose:$false
+				if ($stableModuleFromRepo) {
+					# Found in this repo, take the highest version
+					$stableResult = $stableModuleFromRepo | Sort-Object -Property Version -Descending | Select-Object -First 1
+					break # Stop checking other repos
+				}
+			}
+			catch {
+				$fetchError = "Error finding stable for $moduleNameToFetch in $repo : $($_.Exception.Message)"
+				# Continue to next repo
+			}
 		}
-		catch {
-			$fetchError = "Error finding stable for $moduleNameToFetch : $($_.Exception.Message)"
+		# If we didn't find a stable version, $stableResult will remain $null
+		# Now check for prerelease versions (only if we need to)
+		if (-not $stableResult) {
+			foreach ($repo in $repositoriesForJob) {
+				try {
+					$prereleaseModuleFromRepo = Find-Module -Name $moduleNameToFetch -AllowPrerelease -Repository $repo -ErrorAction SilentlyContinue -Verbose:$false |
+						Where-Object { ($_.PSObject.Properties['IsPrerelease'] -and $_.PSObject.Properties['IsPrerelease'].Value) -or ($_.Version.ToString() -match '-') }
+					if ($prereleaseModuleFromRepo) {
+						# Found in this repo, take the highest version
+						$prereleaseResult = $prereleaseModuleFromRepo | Sort-Object -Property Version -Descending | Select-Object -First 1
+						break # Stop checking other repos
+					}
+				}
+				catch {
+					$prereleaseError = "Error finding prerelease for $moduleNameToFetch in $repo : $($_.Exception.Message)"
+					$fetchError = ($fetchError + "; " + $prereleaseError).TrimStart('; ')
+					# Continue to next repo
+				}
+			}
 		}
-		try {
-			$prereleaseModuleInfo = Find-Module -Name $moduleNameToFetch -AllowPrerelease -Repository $repositoriesForJob -ErrorAction SilentlyContinue -Verbose:$false |
-				Where-Object { ($_.PSObject.Properties['IsPrerelease'] -and $_.PSObject.Properties['IsPrerelease'].Value) -or ($_.Version.ToString() -match '-') } |
-				Sort-Object -Property Version -Descending |
-				Select-Object -First 1
-			if ($prereleaseModuleInfo) { $prereleaseResult = $prereleaseModuleInfo }
-		}
-		catch {
-			$fetchError = ($fetchError + "; " + "Error finding prerelease for $moduleNameToFetch : $($_.Exception.Message)").TrimStart('; ')
+		# Even if we find a stable version, we might want to check for a newer prerelease version in the same repo
+		if ($stableResult) {
+			try {
+				$stableRepo = $stableResult.Repository
+				$prereleaseModuleFromSameRepo = Find-Module -Name $moduleNameToFetch -AllowPrerelease -Repository $stableRepo -ErrorAction SilentlyContinue -Verbose:$false |
+					Where-Object { ($_.PSObject.Properties['IsPrerelease'] -and $_.PSObject.Properties['IsPrerelease'].Value) -or ($_.Version.ToString() -match '-') }
+				if ($prereleaseModuleFromSameRepo) {
+					$prereleaseResult = $prereleaseModuleFromSameRepo | Sort-Object -Property Version -Descending | Select-Object -First 1
+				}
+			}
+			catch {
+				# Non-critical, just log it
+				$fetchError = ($fetchError + "; Error checking for prerelease in same repo as stable for $moduleNameToFetch").TrimStart('; ')
+			}
 		}
 		[pscustomobject]@{
 			ModuleName    = $moduleNameToFetch
@@ -829,7 +872,8 @@ function Get-ModuleUpdateStatus {
 			Skipped       = $false
 		}
 	}
-
+	# Start jobs for each module
+	$preFetchJobs = @()
 	foreach ($moduleEntry in $moduleDataArray) {
 		$moduleNameToFetch = $moduleEntry.ModuleName
 		$currentRepositories = $Repositories # Start with all specified function repos
@@ -838,7 +882,13 @@ function Get-ModuleUpdateStatus {
 			$blacklistedReposSetting = $BlackList[$moduleNameToFetch]
 			if ($blacklistedReposSetting -eq '*') {
 				New-Log "[$moduleNameToFetch] Pre-fetch: Blacklisted ('*'). Skipping online check." -Level DEBUG
-				$onlineModuleVersionsCache[$moduleNameToFetch] = [pscustomobject]@{ ModuleName = $moduleNameToFetch; Stable = $null; PreRelease = $null; ErrorFetching = $null; Skipped = $true }
+				$onlineModuleVersionsCache[$moduleNameToFetch] = [pscustomobject]@{
+					ModuleName    = $moduleNameToFetch
+					Stable        = $null
+					PreRelease    = $null
+					ErrorFetching = $null
+					Skipped       = $true
+				}
 				continue
 			}
 			if ($blacklistedReposSetting -is [array]) {
@@ -849,153 +899,183 @@ function Get-ModuleUpdateStatus {
 			}
 			if ($currentRepositories.Count -eq 0) {
 				New-Log "[$moduleNameToFetch] Pre-fetch: Blacklisted due to repository exclusion for all specified repos. Skipping." -Level DEBUG
-				$onlineModuleVersionsCache[$moduleNameToFetch] = [pscustomobject]@{ ModuleName = $moduleNameToFetch; Stable = $null; PreRelease = $null; ErrorFetching = $null; Skipped = $true }
+				$onlineModuleVersionsCache[$moduleNameToFetch] = [pscustomobject]@{
+					ModuleName    = $moduleNameToFetch
+					Stable        = $null
+					PreRelease    = $null
+					ErrorFetching = $null
+					Skipped       = $true
+				}
 				continue
 			}
 		}
 		if ($currentRepositories.Count -eq 0) {
 			# If $Repositories was empty to begin with
 			New-Log "[$moduleNameToFetch] Pre-fetch: No repositories specified to check. Skipping." -Level DEBUG
-			$onlineModuleVersionsCache[$moduleNameToFetch] = [pscustomobject]@{ ModuleName = $moduleNameToFetch; Stable = $null; PreRelease = $null; ErrorFetching = $null; Skipped = $true }
+			$onlineModuleVersionsCache[$moduleNameToFetch] = [pscustomobject]@{
+				ModuleName    = $moduleNameToFetch
+				Stable        = $null
+				PreRelease    = $null
+				ErrorFetching = $null
+				Skipped       = $true
+			}
 			continue
 		}
-		$job = Start-ThreadJob -ScriptBlock $findModuleScriptBlock -ThrottleLimit $ThrottleLimit -ArgumentList @($moduleNameToFetch, $currentRepositories)
+		$job = Start-ThreadJob -ScriptBlock $findModuleScriptBlock -ThrottleLimit $ThrottleLimit -ArgumentList @($moduleNameToFetch, $currentRepositories, $FindModuleTimeoutSeconds)
 		$job.PSObject.Properties.Add([psnoteproperty]::new("ModuleNameForJob", $moduleNameToFetch)) # Tag job with module name
-		$preFetchJobs.Add($job)
-		# Throttle job submission if using a very high number of modules with Start-ThreadJob's internal throttle
-		if ($preFetchJobs.Count % $ThrottleLimit -eq 0) {
-			Get-Job -State Running | Where-Object { $_.Id -in ($preFetchJobs.Id) } | Wait-Job -Any -Timeout ($TimeoutSeconds * 2) | Out-Null # Wait for any to free up a slot
-		}
+		$preFetchJobs += $job
 	}
-
+	# Single log statement for waiting
 	New-Log "Waiting for $($preFetchJobs.Count) pre-fetch jobs to complete (Timeout per job: ${TimeoutSeconds}s)..."
-
-	# ===== BEGIN PROGRESS TRACKING IMPLEMENTATION =====
-	# Create a variable to track total jobs
+	# Initialize counters for job monitoring
 	$totalJobs = $preFetchJobs.Count
-
-	# Create and configure the timer
-	$timer = New-Object System.Timers.Timer
-	$timer.Interval = 5000  # Check progress every 5 seconds
-	$timer.AutoReset = $true
-
-	# Register the event that will run each time the timer elapses
-	$eventJob = Register-ObjectEvent -InputObject $timer -EventName Elapsed -Action {
-		# Get fresh counts of job states
-		$completedJobs = (Get-Job | Where-Object { $_.Id -in $using:preFetchJobs.Id -and $_.State -eq "Completed" }).Count
-		$runningJobs = (Get-Job | Where-Object { $_.Id -in $using:preFetchJobs.Id -and $_.State -eq "Running" }).Count
-		$failedJobs = (Get-Job | Where-Object { $_.Id -in $using:preFetchJobs.Id -and $_.State -eq "Failed" }).Count
-		$pendingJobs = $using:totalJobs - $completedJobs - $runningJobs - $failedJobs
-
-		# Calculate percentage complete
-		$percentComplete = [math]::Round(($completedJobs / $using:totalJobs) * 100, 1)
-
-		# Use the existing New-Log function to maintain consistent logging
-		New-Log "Pre-fetch progress: $completedJobs/$using:totalJobs completed ($percentComplete%), $runningJobs running, $failedJobs failed, $pendingJobs pending" -Level INFO
-	}
-
-	# Start the timer
-	$timer.Start()
-	# ===== END PROGRESS TRACKING IMPLEMENTATION =====
-	# Initialize counters for progress tracking
-	New-Log "Waiting for $($preFetchJobs.Count) pre-fetch jobs to complete (Timeout per job: ${TimeoutSeconds}s)..."
-
-	# Initialize counters for progress tracking properly with all required values
 	$prefetchSync = [System.Collections.Hashtable]::Synchronized(@{
 			timeouts  = 0
 			completed = 0
-			total     = $preFetchJobs.Count  # Ensure total is set correctly
+			total     = $totalJobs
 		})
-
-	# Make sure total is not zero to avoid division errors
-	if ($prefetchSync.total -le 0) {
-		$prefetchSync.total = 1  # Safety check to avoid division by zero
-	}
-
-	# Process each job with immediate progress reporting
-	foreach ($jobInstance in $preFetchJobs) {
-		$jobModuleName = $jobInstance.PSObject.Properties["ModuleNameForJob"].Value
-		$waitSuccess = $jobInstance | Wait-Job -Timeout $TimeoutSeconds -ErrorAction SilentlyContinue
-
-		# Update progress after each job completes with safety check
-		$currentCompleted = [int]($prefetchSync.completed) + 1
-		$prefetchSync.completed = $currentCompleted
-
-		# Safe percentage calculation - avoid division by zero
-		if ($prefetchSync.total -gt 0) {
-			$percentComplete = [math]::Round(($currentCompleted / $prefetchSync.total) * 100, 1)
+	# For tracking job completion progress
+	$lastCompletedCount = 0
+	$completionThreshold = [Math]::Max(1, [Math]::Ceiling($totalJobs / 10)) # Show progress every ~10% completion
+	$lastProgressUpdate = Get-Date
+	$progressInterval = 5 # seconds
+	# Much simpler approach - check every second, report progress on thresholds
+	$waitStart = Get-Date
+	while ($true) {
+		# Sleep briefly to avoid high CPU usage
+		Start-Sleep -Milliseconds 250
+		# Get current job states
+		$runningJobs = @($preFetchJobs | Where-Object State -EQ 'Running')
+		$completedJobs = @($preFetchJobs | Where-Object State -EQ 'Completed')
+		$runningCount = $runningJobs.Count
+		$completedCount = $completedJobs.Count
+		# Check if we should update progress
+		$timeToUpdate = ((Get-Date) - $lastProgressUpdate).TotalSeconds -ge $progressInterval
+		$completionCountChanged = ($completedCount - $lastCompletedCount) -ge $completionThreshold
+		if ($timeToUpdate -or $completionCountChanged -or ($lastCompletedCount -eq 0 -and $completedCount -gt 0)) {
+			$percentComplete = [math]::Round(($completedCount / $totalJobs) * 100, 1)
+			New-Log "Pre-fetch progress: $completedCount/$totalJobs completed ($percentComplete%), $runningCount still running" -Level INFO
+			$lastProgressUpdate = Get-Date
+			$lastCompletedCount = $completedCount
 		}
-		else {
-			$percentComplete = 100  # Default if total is somehow zero
-		}
-
-		# Report progress every 10 jobs or at 25%, 50%, 75%, 100% milestones
-		if ($currentCompleted % 10 -eq 0 -or $percentComplete % 25 -eq 0) {
-			$remaining = $prefetchSync.total - $currentCompleted
-			$runningJobs = (Get-Job | Where-Object { $_.Id -in $preFetchJobs.Id -and $_.State -eq "Running" }).Count
-			New-Log "Pre-fetch progress: $currentCompleted/$($prefetchSync.total) completed ($percentComplete%), $remaining remaining, $runningJobs still running" -Level INFO
-		}
-
-		# Rest of your existing job processing code
-		$jobOutput = $null
-		$jobErrors = $jobInstance.Error
-		try {
-			$jobOutput = $jobInstance | Receive-Job -ErrorAction SilentlyContinue -Wait
-		}
-		catch {
-			New-Log "[$jobModuleName] Pre-fetch: Error during Receive-Job: $($_.Exception.Message)" -Level WARNING
-		}
-
-		# Your existing error handling code...
-		if (-not $waitSuccess -and $jobInstance.State -eq 'Running') {
-			New-Log "[$jobModuleName] Pre-fetch job timed out." -Level WARNING
-			$prefetchSync.timeouts++
-			$onlineModuleVersionsCache[$jobModuleName] = [pscustomobject]@{ ModuleName = $jobModuleName; Stable = $null; PreRelease = $null; ErrorFetching = "Pre-fetch job timed out."; Skipped = $false }
-			$jobInstance | Stop-Job -Force -ErrorAction SilentlyContinue
-		}
-		elseif ($jobInstance.State -ne 'Completed' -or ($jobInstance.State -eq 'Completed' -and -not $jobOutput)) {
-			$errMsg = "Pre-fetch job failed or returned no data. State: $($jobInstance.State)."
-			if ($jobErrors.Count -gt 0) {
-				$errMsg += " Job Errors: $($jobErrors | ForEach-Object { $_.Exception.ToString() } | Out-String -Width 200)"
+		# Check for timed-out jobs
+		$longRunningJobs = @($runningJobs | Where-Object { ((Get-Date) - $_.PSBeginTime).TotalSeconds -gt $TimeoutSeconds })
+		if ($longRunningJobs.Count -gt 0) {
+			# Process timed out jobs
+			New-Log "Stopping $($longRunningJobs.Count) jobs that exceeded timeout of ${TimeoutSeconds}s" -Level WARNING
+			$prefetchSync.timeouts += $longRunningJobs.Count
+			foreach ($timeoutJob in $longRunningJobs) {
+				$jobModuleName = $timeoutJob.PSObject.Properties["ModuleNameForJob"].Value
+				try {
+					$partialResults = $timeoutJob | Receive-Job -ErrorAction SilentlyContinue
+					if ($partialResults -and $partialResults.ModuleName) {
+						$onlineModuleVersionsCache[$partialResults.ModuleName] = $partialResults
+					}
+					else {
+						$onlineModuleVersionsCache[$jobModuleName] = [pscustomobject]@{
+							ModuleName = $jobModuleName; Stable = $null; PreRelease = $null
+							ErrorFetching = "Pre-fetch job timed out after ${TimeoutSeconds}s"; Skipped = $false
+						}
+					}
+				}
+				catch {
+					$onlineModuleVersionsCache[$jobModuleName] = [pscustomobject]@{
+						ModuleName = $jobModuleName; Stable = $null; PreRelease = $null
+						ErrorFetching = "Pre-fetch job timed out after ${TimeoutSeconds}s"; Skipped = $false
+					}
+				}
+				$timeoutJob | Stop-Job -Force -ErrorAction SilentlyContinue
 			}
-			New-Log "[$jobModuleName] $errMsg" -Level WARNING
-			$onlineModuleVersionsCache[$jobModuleName] = [pscustomobject]@{ ModuleName = $jobModuleName; Stable = $null; PreRelease = $null; ErrorFetching = $errMsg; Skipped = $false }
 		}
-		elseif ($jobOutput) {
-			$onlineModuleVersionsCache[$jobOutput.ModuleName] = $jobOutput # jobOutput.ModuleName should be reliable
+		# Check for aggressive termination criteria
+		$elapsedSeconds = ((Get-Date) - $waitStart).TotalSeconds
+		$percentCompleted = $completedCount / $totalJobs
+		if ($elapsedSeconds -gt 8 -and $percentCompleted -gt 0.90 -and $runningCount -gt 0 -and $runningCount -lt 10) {
+			New-Log "Aggressively terminating remaining $runningCount jobs after $([int]$elapsedSeconds)s as they're taking too long" -Level WARNING
+			foreach ($slowJob in $runningJobs) {
+				$jobModuleName = $slowJob.PSObject.Properties["ModuleNameForJob"].Value
+				try {
+					$partialResults = $slowJob | Receive-Job -ErrorAction SilentlyContinue
+					if ($partialResults -and $partialResults.ModuleName) {
+						$onlineModuleVersionsCache[$partialResults.ModuleName] = $partialResults
+					}
+					else {
+						$onlineModuleVersionsCache[$jobModuleName] = [pscustomobject]@{
+							ModuleName = $jobModuleName; Stable = $null; PreRelease = $null
+							ErrorFetching = "Job terminated for taking too long"; Skipped = $false
+						}
+					}
+				}
+				catch {
+					$onlineModuleVersionsCache[$jobModuleName] = [pscustomobject]@{
+						ModuleName = $jobModuleName; Stable = $null; PreRelease = $null
+						ErrorFetching = "Job terminated for taking too long"; Skipped = $false
+					}
+				}
+				$slowJob | Stop-Job -Force -ErrorAction SilentlyContinue
+			}
 		}
-		Remove-Job $jobInstance -ErrorAction SilentlyContinue
+		# EXIT CONDITIONS - in order of importance
+		# 1. All jobs have finished - clean exit
+		if ($runningCount -eq 0) {
+			# Final progress report if needed
+			if (((Get-Date) - $lastProgressUpdate).TotalSeconds -gt 0.5) {
+				$percentComplete = [math]::Round(($completedCount / $totalJobs) * 100, 1)
+				New-Log "Pre-fetch progress: $completedCount/$totalJobs completed ($percentComplete%), 0 still running" -Level INFO
+			}
+			break
+		}
+		# 2. Hard timeout - if we've waited too long, just exit regardless
+		if ($elapsedSeconds -gt 30) {
+			New-Log "Hard timeout after 30 seconds - exiting job monitoring loop" -Level WARNING
+			# Stop any remaining running jobs
+			foreach ($job in $runningJobs) {
+				$job | Stop-Job -Force -ErrorAction SilentlyContinue
+			}
+			break
+		}
 	}
-
-	# Final progress report
+	# Receive results from all completed jobs (not already processed)
+	$remainingCompletedJobs = @($preFetchJobs | Where-Object { $_.State -eq 'Completed' })
+	if ($remainingCompletedJobs.Count -gt 0) {
+		New-Log "Processing $($remainingCompletedJobs.Count) remaining completed jobs" -Level VERBOSE
+		foreach ($job in $remainingCompletedJobs) {
+			$jobModuleName = $job.PSObject.Properties["ModuleNameForJob"].Value
+			try {
+				$jobOutput = $job | Receive-Job -ErrorAction SilentlyContinue -Wait
+				if ($jobOutput -and $jobOutput.ModuleName) {
+					$onlineModuleVersionsCache[$jobOutput.ModuleName] = $jobOutput
+					$prefetchSync.completed++
+				}
+			}
+			catch {
+				# Already logged elsewhere
+			}
+		}
+	}
+	# Clean up all jobs
+	$preFetchJobs | Remove-Job -Force -ErrorAction SilentlyContinue
 	New-Log "Pre-fetch complete: $($prefetchSync.completed)/$($prefetchSync.total) processed, $($prefetchSync.timeouts) timeouts" -Level INFO
-
-	# ===== BEGIN CLEANUP FOR PROGRESS TRACKING =====
-	# Stop and clean up the timer
-	$timer.Stop()
-	$timer.Dispose()
-	Unregister-Event -SourceIdentifier $eventJob.Name
-	Remove-Job -Job $eventJob -Force
-	# ===== END CLEANUP FOR PROGRESS TRACKING =====
-
 	New-Log "Online version pre-fetching complete. Cached data for $($onlineModuleVersionsCache.Count) modules. Timeouts: $($prefetchSync.timeouts)"
 	$preFetchDuration = (Get-Date) - $overallOperationStartTime
 	New-Log "Pre-fetching (Stage 1) took: $($preFetchDuration.ToString("g"))"
-
 	# Ensure all modules in $moduleDataArray have an entry in $onlineModuleVersionsCache
 	foreach ($moduleEntry in $moduleDataArray) {
 		if (-not $onlineModuleVersionsCache.ContainsKey($moduleEntry.ModuleName)) {
 			New-Log "[$($moduleEntry.ModuleName)] No pre-fetched data found post-job processing. Marking as error/skipped." -Level WARNING
 			$onlineModuleVersionsCache[$moduleEntry.ModuleName] = [pscustomobject]@{
-				ModuleName = $moduleEntry.ModuleName; Stable = $null; PreRelease = $null; ErrorFetching = "Data not found in pre-fetch cache."; Skipped = $true
+				ModuleName    = $moduleEntry.ModuleName
+				Stable        = $null
+				PreRelease    = $null
+				ErrorFetching = "Data not found in pre-fetch cache."
+				Skipped       = $true
 			}
 		}
 	}
-
 	# --- STAGE 2: Parallel Processing with Pre-fetched Data ---
 	$results = [System.Collections.Concurrent.ConcurrentBag[object]]::new()
 	$sync = [System.Collections.Hashtable]::Synchronized(@{
-			processed = 0; updates = 0; errors = 0; #timeouts = 0 (timeouts handled in prefetch)
+			processed = 0; updates = 0; errors = 0
 			total = $validModuleCountForProcessing; startTime = Get-Date
 		})
 	$NewLogDef = ${function:New-Log}.ToString()
@@ -2572,9 +2652,9 @@ function Compare-ModuleVersion {
 #endregion Compare-ModuleVersio (Helper)
 ### OBS: New-Log Function is needed otherwise remove all New-Log and replace with Write-Host. New-Log is vastly better though, check the link below:
 #Example:
+#Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
+#Check-PSResourceRepository -ImportDependencies
 <#
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
-Check-PSResourceRepository -ImportDependencies
 Import-Module -Name ThreadJob -Force
 $ignoredModules = @('Example2.Diagnostics') #Fully ignored modules
 $blackList = @{ #Ignored module and repo combo.
@@ -2585,7 +2665,7 @@ $paths = $env:PSModulePath.Split(';') | Where-Object { $_ -notmatch '.vscode' -a
 $moduleInfo = Get-ModuleInfo -Paths $paths -IgnoredModules $ignoredModules
 $outdated = Get-ModuleUpdateStatus -ModuleInventory $moduleInfo -TimeoutSeconds 120 -Repositories @("PSGallery", "Nuget", "NugetGallery") -MatchAuthor -BlackList $blackList
 if ($outdated) {
-	$res = $outdated | Update-Modules -Clean -UseProgressBar
+	$res = $outdated | Update-Modules -UseProgressBar
 	$res
 }
 else {
