@@ -3,12 +3,13 @@ function New-Log {
     .SYNOPSIS
         Writes formatted log messages to the console and/or a file.
     .DESCRIPTION
-        New-Log provides a flexible way to log messages with different levels (INFO, ERROR, WARNING, etc.),
+        New-Log provides a flexible way to log messages with different levels (INFO, ERROR, EXTENDEDERROR, WARNING, etc.),
         formats (TEXT, JSON), and destinations (Console, File). It supports pipeline input,
         automatic grouping of pipeline objects, log file rotation, custom date formats,
         and intelligent error context retrieval. Handles null/empty messages and complex nested objects.
         Internal verbose messages only appear if -Verbose is used directly on New-Log.
-        Adds type information and respects original content indentation for multi-line console output.
+        Returns the exact same object that was passed in when -ReturnObject is used.
+        EXTENDEDERROR level provides comprehensive error details including inner exceptions, category info, and error IDs.
     .PARAMETER Message
         The message or object to log. Can be piped. Objects will be formatted appropriately.
         Handles $null and empty strings gracefully.
@@ -16,11 +17,12 @@ function New-Log {
 		Stops the function from clearing the $Error variable. Default: clears it.
     .PARAMETER Level
         The severity level of the log message. Defaults to "INFO".
-        Valid values: ERROR, WARNING, INFO, SUCCESS, DEBUG, VERBOSE.
+        Valid values: ERROR, EXTENDEDERROR, WARNING, INFO, SUCCESS, DEBUG, VERBOSE.
+        EXTENDEDERROR shows full error context including extended details.
     .PARAMETER NoConsole
         Switch parameter. If present, suppresses output to the console.
     .PARAMETER ReturnObject
-        Switch parameter. If present, returns a PSCustomObject representing the log entry.
+        Switch parameter. If present, returns the exact same object that was passed in.
     .PARAMETER LogFilePath
         Specifies the full path to the log file. If not provided, logging only occurs to the console (unless -NoConsole is specified).
     .PARAMETER ForcedLogFile
@@ -36,9 +38,6 @@ function New-Log {
     .PARAMETER LogFormat
         Specifies the format for log entries written to the file. Defaults to "TEXT".
         Valid values: TEXT, JSON.
-    .PARAMETER GroupObjects
-        Switch parameter. If present, collects all pipeline input objects and logs them as a single formatted table at the end.
-        Overrides automatic grouping behavior.
     .PARAMETER NoAutoGroup
         Switch parameter. If present, disables the automatic grouping of multiple pipeline input objects.
         Each pipeline item will be logged individually as it arrives.
@@ -48,87 +47,94 @@ function New-Log {
     .PARAMETER DateFormat
         Specifies the date and time format string for timestamps in the log.
         Defaults to 'yyyy-MM-dd HH:mm:ss.fff'.
+        Common formats: 'yyyy-MM-dd HH:mm:ss.fff', 'yyyy-MM-dd HH:mm:ss', 'yyyy-MM-ddTHH:mm:ss', 'MM/dd/yyyy HH:mm:ss', 'dd.MM.yyyy HH:mm:ss', 'yyyyMMdd_HHmmss'.
     .PARAMETER ErrorObject
         Allows explicitly passing an ErrorRecord object (e.g., from a catch block: $_ | New-Log -Level ERROR -ErrorObject $_).
         This takes precedence over automatic error lookup. Defaults to trying to capture $_ from the caller's scope if available.
     .EXAMPLE
 		$ht = @{ Name = "John"; Age = 30; Role = "Developer" }
-		$ht | New-Log -Level INFO
-		# Output includes type and properly indented key-value pairs
+		$result = $ht | New-Log -Level INFO -ReturnObject
+		# Console shows clean table format with prefixes, $result contains the original hashtable
     .EXAMPLE
 		$complexObj = [PSCustomObject]@{ Name = "Complex"; Nested = @{ Level = 1; Data = @(1,2) } }
-		$complexObj | New-Log -Level INFO
-		# Output includes type and properly indented JSON representation
+		$result = $complexObj | New-Log -Level INFO -ReturnObject
+		# Console shows clean table format with prefixes, $result contains the original PSCustomObject
     .EXAMPLE
 		Get-Process | select -first 3 | New-Log -GroupObjects
 		# Output includes header and properly indented table rows
+    .EXAMPLE
+		New-Log "JSON test" -LogFilePath "test.log" -LogFormat JSON
+		# Creates test.log in current directory
 	.EXAMPLE
-		$complexObj = [PSCustomObject]@{
-			Name   = "Complex Object"
-			Nested = [PSCustomObject]@{
-				Level     = 1
-				Data      = @(1, 2, 3)
-				SubNested = [PSCustomObject]@{
-					Level      = 2
-					Enabled    = $true
-					Properties = @{
-						A = "Value A"
-						B = "Value B"
+		$megaObject = [PSCustomObject]@{
+			Level1  = @{
+				Level2A = @{
+					Level3A = @{
+						Data    = @("Item1", "Item2", "Item3")
+						Numbers = @(1..10)
+						Nested  = @{
+							DeepValue = "VeryDeep"
+							DeepArray = @(
+								@{ SubItem1 = "Value1"; SubData = @(1, 2, 3) }, @{ SubItem2 = "Value2"; SubData = @(4, 5, 6) }
+							)
+						}
 					}
+					Level3B = "Simple string at level 3"
+				}
+				Level2B = @{
+					Dates    = @((Get-Date), (Get-Date).AddDays(-1), (Get-Date).AddDays(1))
+					Booleans = @($true, $false, $true)
+					Mixed    = @("String", 42, $true, @{ InnerHash = "Value" })
+				}
+			}
+			Level1B = [PSCustomObject]@{
+				Property1 = "PSCustomObject in main object"
+				Property2 = @{
+					Array = @(1..5)
+					Hash  = @{ Key1 = "Value1"; Key2 = "Value2" }
 				}
 			}
 		}
-		$complexObj | New-Log
-		Output:
-		[2025-04-23 05:32:38.661][INFO] Type is [management.automation.pscustomobject]
-		[2025-04-23 05:32:38.661][INFO] {
-		[2025-04-23 05:32:38.661][INFO]   "Name": "Complex Object",
-		[2025-04-23 05:32:38.661][INFO]   "Nested": {
-		[2025-04-23 05:32:38.661][INFO]     "Level": 1,
-		[2025-04-23 05:32:38.661][INFO]     "Data": [
-		[2025-04-23 05:32:38.661][INFO]       1,
-		[2025-04-23 05:32:38.661][INFO]       2,
-		[2025-04-23 05:32:38.661][INFO]       3
-		[2025-04-23 05:32:38.661][INFO]     ],
-		[2025-04-23 05:32:38.661][INFO]     "SubNested": {
-		[2025-04-23 05:32:38.661][INFO]       "Level": 2,
-		[2025-04-23 05:32:38.661][INFO]       "Enabled": true,
-		[2025-04-23 05:32:38.661][INFO]       "Properties": {
-		[2025-04-23 05:32:38.661][INFO]         "A": "Value A",
-		[2025-04-23 05:32:38.661][INFO]         "B": "Value B"
-		[2025-04-23 05:32:38.661][INFO]       }
-		[2025-04-23 05:32:38.661][INFO]     }
-		[2025-04-23 05:32:38.661][INFO]   }
-		[2025-04-23 05:32:38.661][INFO] }
+		$result = $megaObject | New-Log -Level INFO -ReturnObject
+		[2025-07-06 11:02:19.322][INFO] Level1             Level1B
+		[2025-07-06 11:02:19.322][INFO] ------             -------
+		[2025-07-06 11:02:19.322][INFO] {Level2A, Level2B} @{Property1=PSCustomObject in main object; Property2=System.Collections.Hashtable}
 	.EXAMPLE
 		try {
-			1 / 0
+			Get-ChildItem -Path C:\Nonexistingpath -ea Stop
 		}
 		catch {
 			New-Log "Failed" -Level ERROR
 		}
-		[2025-04-23 05:37:32.118][ERROR] Failed
-		[2025-04-23 05:37:32.118][ERROR Detail] Exception: Attempted to divide by zero.
-		[2025-04-23 05:37:32.118][ERROR Detail] Caller: File [New-Log.ps1], Line [848], Context [New-Log.ps1]
-		[2025-04-23 05:37:32.118][ERROR Detail] Code: 1 / 0
+		[2025-07-06 07:10:30.174][ERROR] Failed [Function: test-error][CodeRow: (2,4) (Function,Script)][FailedCode: Get-ChildItem -Path C:\Nonexistingpath -ea Stop][ExceptionMessage: Cannot find path 'C:\Nonexistingpath' because it does not exist.]
     .NOTES
         Author: Harze2k
-        Date:   2025-05-10
-        Version: 3.7 (Fixed output when -Level ERROR is used.)
-        - Console writer now respects and preserves the original indentation from formatters (like ConvertTo-Json, Format-Table) instead of applying a secondary, fixed indent.
-        - Added 'Type is [typename]' line for complex objects in console TEXT output.
+        Date:   2025-07-06
+        Version: 4.0 (Completely redesigned complex object formatting to use Format-Table for clean output)
+		- MAJOR: -ReturnObject now returns the ORIGINAL input object instead of log metadata
+        - MAJOR: Completely redesigned complex object formatting to use Format-Table for clean output
+		- MAJOR: Added -Level EXTENDEDERROR for even more error details.
+		- Removed all internal Write-Verbose messeges. (Not needed).
+        - Hashtables and custom objects now display as proper tables in console output
+        - Table output (multiple lines) now counts as single logical entry
+        - Improved user experience: pipeline operations with -ReturnObject now work intuitively
+        - Console output for complex objects is now much more readable and professional
+        - Fixed GroupedItems being empty in grouped pipeline results by properly converting List[object] to array
+        - Added validation for DateFormat parameter with 6 most common datetime formats
+        - Added automatic conversion of relative log file paths to absolute paths using current location
+        - Fixed multi-line object output to show each line with proper timestamp and level prefix
+        - Added validation for error line numbers and column offsets to prevent negative values
         - Internal Write-Verbose messages only show if -Verbose is passed *directly* to New-Log.
         - Handles null/empty string input gracefully.
         - Uses UTF8 encoding without BOM for log files.
-        - Added enhanced output to make function more testable
         - Fixed log rotation to properly track rotated files
-        - Changed ErrorObject parameter default to $null for more predictable behavior.
         - Removed unused IsPSCore parameter from Write-PrefixedLinesToConsole helper.
+        - Improved object formatting to match natural PowerShell output with timestamp/level prefixes
     #>
 	[CmdletBinding()]
 	param(
 		[Parameter(ValueFromPipeline, Position = 0)]$Message,
-		[Parameter(Position = 1)][ValidateSet("ERROR", "WARNING", "INFO", "SUCCESS", "DEBUG", "VERBOSE")][string]$Level = "INFO",
+		[Parameter(Position = 1)][ValidateSet("INFO", "SUCCESS", "WARNING", "ERROR", "EXTENDEDERROR", "VERBOSE", "DEBUG")][string]$Level = "INFO",
 		[Parameter(Position = 2)][switch]$DontClearErrorVariable,
 		[Parameter(Position = 3)][switch]$NoConsole,
 		[Parameter(Position = 4)][switch]$ReturnObject,
@@ -137,35 +143,30 @@ function New-Log {
 		[Parameter(Position = 7)][switch]$AppendTimestampToFile,
 		[Parameter(Position = 8)][ValidateRange(0, [double]::MaxValue)][double]$LogRotationSizeMB = 1,
 		[Parameter(Position = 9)][ValidateSet("TEXT", "JSON")][string]$LogFormat = "TEXT",
-		[Parameter(Position = 10)][switch]$GroupObjects,
 		[Parameter(Position = 11)][switch]$NoAutoGroup,
 		[Parameter(Position = 12)][switch]$NoErrorLookup,
-		[Parameter(Position = 13)][string]$DateFormat = 'yyyy-MM-dd HH:mm:ss.fff',
+		[Parameter(Position = 13)][ValidateSet('yyyy-MM-dd HH:mm:ss.fff', 'yyyy-MM-dd HH:mm:ss.fff', 'yyyy-MM-ddTHH:mm:ss.fff', 'MM/dd/yyyy HH:mm:ss.fff', 'dd.MM.yyyy HH:mm:ss.fff', 'yyyyMMdd_HHmmss.fff')][string]$DateFormat = 'yyyy-MM-dd HH:mm:ss.fff',
 		[Parameter()]$ErrorObject = $(if ($global:error.Count -gt 0) { $global:error[0] } else { $null })
 	)
-	Begin {
+	begin {
 		$script:isPSCore = $PSVersionTable.PSVersion.Major -ge 6
 		$script:LevelColors = @{
-			ERROR   = @{ ANSI = 91; PS = 'Red' }
-			WARNING = @{ ANSI = 93; PS = 'Yellow' }
-			INFO    = @{ ANSI = 37; PS = 'White' }
-			SUCCESS = @{ ANSI = 92; PS = 'Green' }
-			DEBUG   = @{ ANSI = 94; PS = 'Blue' }
-			VERBOSE = @{ ANSI = 96; PS = 'Cyan' }
+			ERROR         = @{ ANSI = 91; PS = 'Red' }
+			EXTENDEDERROR = @{ ANSI = 91; PS = 'Red' }
+			WARNING       = @{ ANSI = 93; PS = 'Yellow' }
+			INFO          = @{ ANSI = 37; PS = 'White' }
+			SUCCESS       = @{ ANSI = 92; PS = 'Green' }
+			DEBUG         = @{ ANSI = 94; PS = 'Blue' }
+			VERBOSE       = @{ ANSI = 96; PS = 'Cyan' }
 		}
 		$script:Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false)
 		$script:OriginalConsoleEncoding = $null
-		$script:ShowInternalVerbose = $PSBoundParameters.ContainsKey('Verbose') -and ($VerbosePreference -eq [System.Management.Automation.ActionPreference]::Continue)
 		$script:ObjectCollection = [System.Collections.Generic.List[object]]::new()
 		$script:IsPipelineInput = $MyInvocation.ExpectingInput
 		$script:PipelineItemCounter = 0
 		$script:InitialErrorCount = $Error.Count
-		$script:LogRecordCount = 0    # Added to track log entries for testing
-		$script:RotatedFiles = @()    # Added to track rotated files for testing
-		$script:LogRotated = $false   # Added flag to indicate if rotation occurred
-		if ($script:ShowInternalVerbose) {
-			Write-Verbose "Internal verbose logging enabled for this call."
-		}
+		$script:RotatedFiles = @()    # Track rotated files for testing
+		$script:LogRotated = $false   # Flag to indicate if rotation occurred
 		try {
 			$script:OriginalConsoleEncoding = [Console]::OutputEncoding
 			[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -175,15 +176,17 @@ function New-Log {
 		}
 		if ($LogFilePath -and $AppendTimestampToFile) {
 			try {
-				$fileInfo = [System.IO.FileInfo]::new($LogFilePath)
+				# Convert relative path to absolute path if needed before processing timestamp
+				$resolvedLogFilePath = $LogFilePath
+				if (-not [System.IO.Path]::IsPathRooted($LogFilePath)) {
+					$resolvedLogFilePath = Join-Path -Path (Get-Location -PSProvider FileSystem).Path -ChildPath $LogFilePath
+				}
+				$fileInfo = [System.IO.FileInfo]::new($resolvedLogFilePath)
 				$logDir = $fileInfo.DirectoryName
 				$logBaseName = $fileInfo.BaseName
 				$logExtension = $fileInfo.Extension
 				$timestampSuffix = Get-Date -Format 'yyyyMMdd_HHmmss'
 				$LogFilePath = Join-Path -Path $logDir -ChildPath ($logBaseName + "_" + $timestampSuffix + $logExtension)
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Appended timestamp, new LogFilePath: $LogFilePath"
-				}
 			}
 			catch {
 				Write-Error "Failed to append timestamp to LogFilePath '$LogFilePath' : $($_.Exception.Message)"
@@ -191,25 +194,48 @@ function New-Log {
 		}
 		#region Write-PrefixedLinesToConsole
 		function Write-PrefixedLinesToConsole {
-			# MODIFIED: Removed IsPSCore parameter
 			[CmdletBinding()]
 			param(
 				[string]$Prefix,
 				[string]$Content,
-				$Color
+				$Color,
+				[string]$CurrentTimestamp,
+				[string]$CurrentLevel,
+				[hashtable]$CurrentLevelColors,
+				[bool]$CurrentIsPSCore,
+				[bool]$UseIndividualPrefixes = $false
 			)
+			if ([string]::IsNullOrEmpty($Content)) {
+				Write-Host $Prefix -ForegroundColor $Color
+				return
+			}
 			$lines = $Content -split "\r?\n"
 			$nonEmptyLines = $lines | Where-Object { $_ -ne '' }
 			if ($nonEmptyLines.Count -eq 0) {
 				Write-Host $Prefix -ForegroundColor $Color
 				return
 			}
-			foreach ($line in $nonEmptyLines) {
-				# Construct the output string before calling Write-Host
-				$outputLine = $Prefix + " " + $line
-				Write-Host $outputLine -ForegroundColor $Color
-				# Track that console output was generated (for testing)
-				$script:LogRecordCount++
+			# For table output (multiple lines), show each line with prefix
+			if ($UseIndividualPrefixes -and $nonEmptyLines.Count -gt 1) {
+				foreach ($line in $nonEmptyLines) {
+					$colorCode = $CurrentLevelColors[$CurrentLevel].ANSI
+					$ansiReset = "`e[0m"
+					$individualPrefix = if ($CurrentIsPSCore) {
+						"`e[34m[$CurrentTimestamp]$ansiReset`e[${colorCode}m[$CurrentLevel]$ansiReset"
+					}
+					else {
+						"[$CurrentTimestamp][$CurrentLevel]"
+					}
+					$outputLine = $individualPrefix + " " + $line
+					Write-Host $outputLine -ForegroundColor $Color
+				}
+			}
+			else {
+				# For single lines or when individual prefixes not requested
+				foreach ($line in $nonEmptyLines) {
+					$outputLine = $Prefix + " " + $line
+					Write-Host $outputLine -ForegroundColor $Color
+				}
 			}
 		}
 		#endregion Write-PrefixedLinesToConsole
@@ -220,40 +246,87 @@ function New-Log {
 				$CurrentItem,
 				[bool]$NoErrorLookupParameter
 			)
-			if ($null -ne $ErrorObject -and $ErrorObject -is [System.Management.Automation.ErrorRecord]) {
-				return $ErrorObject
-			}
-			if ($CurrentItem -is [System.Management.Automation.ErrorRecord]) {
-				return $CurrentItem
-			}
 			if ($NoErrorLookupParameter) {
 				return $null
 			}
-			$scopedErrorVar = try { Get-Variable -Name '_' -Scope 1 -ErrorAction Stop } catch { $null }
-			if ($null -ne $scopedErrorVar -and $scopedErrorVar.Value -is [System.Management.Automation.ErrorRecord]) {
-				return $scopedErrorVar.Value
+			# Check explicit ErrorObject parameter first
+			if ($null -ne $ErrorObject -and $ErrorObject -is [System.Management.Automation.ErrorRecord]) {
+				return $ErrorObject
+			}
+			# Check if CurrentItem is an ErrorRecord
+			if ($CurrentItem -is [System.Management.Automation.ErrorRecord]) {
+				return $CurrentItem
+			}
+			# Check for $_ in caller scope (most common in catch blocks)
+			try {
+				$scopedErrorVar = Get-Variable -Name '_' -Scope 1 -ErrorAction Stop
+				if ($null -ne $scopedErrorVar.Value -and $scopedErrorVar.Value -is [System.Management.Automation.ErrorRecord]) {
+					return $scopedErrorVar.Value
+				}
+			}
+			catch {
+				Write-Warning "Error objaect: $_ not available in caller scope"
 			}
 			if ($Error.Count -gt $script:InitialErrorCount) {
 				return $Error[0]
 			}
-			try {
-				$callStack = Get-PSCallStack -ErrorAction SilentlyContinue
-				if ($callStack -match 'catch') {
-					if ($Error.Count -gt 0) {
-						return $Error[0]
-					}
-				}
-			}
-			catch {
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Could not examine call stack: $($_.Exception.Message)"
-				}
+			if ($global:Error.Count -gt 0) {
+				return $global:Error[0]
 			}
 			return $null
 		}
 		#endregion Get-ErrorToProcess
-		#region Format-ItemForTextOutput
-		function Format-ItemForTextOutput {
+		#region Get-ExtendedErrorDetails
+		function Get-ExtendedErrorDetails {
+			[CmdletBinding()]
+			param(
+				[System.Management.Automation.ErrorRecord]$ErrorRecord
+			)
+			if ($null -eq $ErrorRecord) {
+				return $null
+			}
+			$extendedDetails = [System.Collections.Generic.List[string]]::new()
+			if ($ErrorRecord.Exception.InnerException) {
+				$innerMsg = $ErrorRecord.Exception.InnerException.Message
+				if ($innerMsg -and $innerMsg -ne $ErrorRecord.Exception.Message) {
+					$extendedDetails.Add("InnerException: $innerMsg")
+				}
+			}
+			if ($ErrorRecord.CategoryInfo) {
+				$categoryInfo = $ErrorRecord.CategoryInfo.ToString()
+				if ($categoryInfo -and $categoryInfo -ne 'NotSpecified') {
+					$extendedDetails.Add("CategoryInfo: $categoryInfo")
+				}
+			}
+			if ($ErrorRecord.FullyQualifiedErrorId -and $ErrorRecord.FullyQualifiedErrorId -ne 'NativeCommandError') {
+				$extendedDetails.Add("FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)")
+			}
+			if ($ErrorRecord.TargetObject) {
+				$targetObjStr = try {
+					$ErrorRecord.TargetObject.ToString()
+				}
+				catch {
+					$ErrorRecord.TargetObject.GetType().Name
+				}
+				if ($targetObjStr -and $targetObjStr.Length -lt 100) {
+					$extendedDetails.Add("TargetObject: $targetObjStr")
+				}
+			}
+			if ($ErrorRecord.Exception.HResult -and $ErrorRecord.Exception.HResult -ne 0 -and $ErrorRecord.Exception.HResult -ne -2146233088) {
+				$hresultHex = "0x{0:X8}" -f $ErrorRecord.Exception.HResult
+				$extendedDetails.Add("HResult: $hresultHex")
+			}
+			if ($ErrorRecord.Exception.Source -and $ErrorRecord.Exception.Source -ne 'System.Management.Automation') {
+				$extendedDetails.Add("Source: $($ErrorRecord.Exception.Source)")
+			}
+			if ($extendedDetails.Count -gt 0) {
+				return ($extendedDetails -join " | ")
+			}
+			return $null
+		}
+		#endregion Get-ExtendedErrorDetails
+		#region Format-ItemForDisplay
+		function Format-ItemForDisplay {
 			[CmdletBinding()]
 			param(
 				$Item
@@ -264,38 +337,41 @@ function New-Log {
 			if ($Item -is [string]) {
 				return $Item
 			}
-			if ($Item -is [System.Collections.IDictionary]) {
-				$typeName = $Item.GetType().Name.ToLower()
-				$outputLines = [System.Collections.Generic.List[string]]::new()
-				$sortedKeys = $Item.Keys | Sort-Object
-				foreach ($key in $sortedKeys) {
-					$valueString = try {
-						($Item[$key] | Out-String -Width 120).Trim()
+			# For hashtables, custom objects, etc. - choose format based on property count
+			if ($Item -is [System.Collections.IDictionary] -or
+				($Item -isnot [ValueType] -and $Item -isnot [string] -and $Item -isnot [System.Management.Automation.ErrorRecord])) {
+				try {
+					$propertyCount = 0
+					if ($Item -is [System.Collections.IDictionary]) {
+						$propertyCount = $Item.Keys.Count
 					}
-					catch {	}
-					$outputLines.Add("$key : $valueString")
+					elseif ($Item -is [PSCustomObject]) {
+						$propertyCount = ($Item.PSObject.Properties | Where-Object { $_.MemberType -eq 'NoteProperty' }).Count
+					}
+					else {
+						# For other objects, try to get visible properties
+						$propertyCount = ($Item | Get-Member -MemberType Properties | Where-Object { $_.Name -notlike '__*' }).Count
+					}
+					# Use Format-List for 4+ properties, Format-Table for fewer
+					if ($propertyCount -ge 4) {
+						$listString = ($Item | Format-List | Out-String).Trim()
+						return $listString
+					}
+					else {
+						$tableString = ($Item | Format-Table -AutoSize | Out-String).Trim()
+						return $tableString
+					}
 				}
-				$keyValueString = $outputLines -join "`r`n"
-				return "Type is [$typeName]`r`n$keyValueString"
+				catch {
+					return ($Item | Out-String -Width 4096).Trim()
+				}
 			}
 			if ($Item -is [System.Management.Automation.ErrorRecord]) {
 				return ($Item | Format-List * -Force | Out-String).Trim()
 			}
-			if ($Item -isnot [ValueType]) {
-				$typeName = ($Item.PSObject.TypeNames[0] -replace '^System\.', '').ToLower()
-				try {
-					$jsonString = ($Item | ConvertTo-Json -Depth 5 -WarningAction SilentlyContinue | Out-String).Trim()
-					return "Type is [$typeName]`r`n$jsonString"
-				}
-				catch {
-					Write-Warning "Failed JSON format: $($_.Exception.Message). Fallback."
-					$fallbackString = ($Item | Out-String -Width 4096).Trim()
-					return "Type is [$typeName]`r`n$fallbackString"
-				}
-			}
 			return ($Item | Out-String -Width 4096).Trim()
 		}
-		#endregion Format-ItemForTextOutput
+		#endregion Format-ItemForDisplay
 		#region Write-LogToFile
 		function Write-LogToFile {
 			[CmdletBinding()]
@@ -304,64 +380,47 @@ function New-Log {
 				[double]$LogRotationSizeMB = 1
 			)
 			if (-not $LogFilePath) {
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "LogFilePath not specified."
-				}
+				Write-Warning "LogFilePath not specified."
 				return
 			}
 			try {
-				$parentDir = Split-Path -Path $LogFilePath -Parent -ErrorAction Stop
+				# Convert relative path to absolute path if needed
+				$resolvedLogFilePath = $LogFilePath
+				if (-not [System.IO.Path]::IsPathRooted($LogFilePath)) {
+					$resolvedLogFilePath = Join-Path -Path (Get-Location -PSProvider FileSystem).Path -ChildPath $LogFilePath
+				}
+				$parentDir = Split-Path -Path $resolvedLogFilePath -Parent -ErrorAction Stop
+				if ([string]::IsNullOrEmpty($parentDir)) {
+					$parentDir = (Get-Location -PSProvider FileSystem).Path
+				}
 				if (-not (Test-Path -Path $parentDir -PathType Container)) {
-					if ($script:ShowInternalVerbose) {
-						Write-Verbose "Creating log directory: $parentDir"
-					}
 					New-Item -Path $parentDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
 				}
+				$LogFilePath = $resolvedLogFilePath
 				$fileExists = Test-Path -Path $LogFilePath -PathType Leaf
-				# Handle log rotation if needed
 				if ($LogRotationSizeMB -gt 0 -and $fileExists) {
 					$logFileItem = Get-Item -Path $LogFilePath -ErrorAction SilentlyContinue
 					# Convert bytes to MB for comparison - using raw bytes is more accurate
 					$fileSizeInBytes = $logFileItem.Length
 					$thresholdInBytes = $LogRotationSizeMB * 1MB
-					if ($script:ShowInternalVerbose) {
-						Write-Verbose "File size: $fileSizeInBytes bytes, threshold: $thresholdInBytes bytes"
-					}
 					if ($logFileItem -and $fileSizeInBytes -ge $thresholdInBytes) {
 						$backupTimestamp = Get-Date -Format 'yyyyMMdd_HHmmssfff'
 						$fileInfo = [System.IO.FileInfo]::new($LogFilePath)
 						$backupPath = Join-Path -Path $fileInfo.DirectoryName -ChildPath ($fileInfo.BaseName + "_" + $backupTimestamp + $fileInfo.Extension)
-						if ($script:ShowInternalVerbose) {
-							Write-Verbose "Log rotation. Rotating '$LogFilePath' to '$backupPath'"
-						}
-						# Perform the rotation
 						Copy-Item -Path $LogFilePath -Destination $backupPath -Force -ErrorAction SilentlyContinue
 						Remove-Item -Path $LogFilePath -Force -ErrorAction SilentlyContinue
-						# Track rotated files for testing
 						$script:RotatedFiles += $backupPath
 						$script:LogRotated = $true
-						if ($script:ShowInternalVerbose) {
-							Write-Verbose "Rotated file count: $($script:RotatedFiles.Count)"
-						}
 						$fileExists = $false
 					}
 				}
-				# Write or append to file
 				if ($ForcedLogFile -or -not $fileExists) {
-					if ($script:ShowInternalVerbose) {
-						Write-Verbose "Writing (overwrite/new): $LogFilePath"
-					}
 					[System.IO.File]::WriteAllText($LogFilePath, $ContentToWrite, $script:Utf8NoBomEncoding)
 				}
 				else {
-					if ($script:ShowInternalVerbose) {
-						Write-Verbose "Appending: $LogFilePath"
-					}
 					$contentToAppend = if ($fileExists -and (Get-Item $LogFilePath).Length -gt 0) { "`r`n" + $ContentToWrite } else { $ContentToWrite }
 					[System.IO.File]::AppendAllText($LogFilePath, $contentToAppend, $script:Utf8NoBomEncoding)
 				}
-				# For testing purposes, track the write
-				$script:LogRecordCount++
 			}
 			catch {
 				Write-Error "Failed write log '$LogFilePath': $($_.Exception.Message)"
@@ -383,35 +442,31 @@ function New-Log {
 				[bool]$DontClearErrorVariable
 			)
 			if ($null -eq $ItemToProcess -and $CurrentLevel -ne 'ERROR') {
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Processing null input."
-				}
 			}
 			# Prepare basic log entry
 			$timestamp = Get-Date -Format $CurrentDateFormat
-			$logEntryBase = [PSCustomObject]@{
-				Timestamp = $timestamp
-				Level     = $CurrentLevel
-				Message   = $null
-			}
 			$originalItem = $ItemToProcess
 			$errorDetails = $null
 			$effectiveItem = $ItemToProcess
-			# Handle null/empty items
-			if (($null -eq $effectiveItem -or $effectiveItem -eq "") -and $CurrentLevel -ne 'ERROR') {
+			if (($null -eq $effectiveItem -or $effectiveItem -eq "") -and $CurrentLevel -ne 'ERROR' -and $CurrentLevel -ne 'EXTENDEDERROR') {
 				$effectiveItem = ""
 			}
-			# Special handling for ERROR level
-			$err = $null # Ensure $err is initialized
-			if ($CurrentLevel -eq 'ERROR') {
+			# Special handling for ERROR and EXTENDEDERROR levels
+			$err = $null
+			if ($CurrentLevel -eq 'ERROR' -or $CurrentLevel -eq 'EXTENDEDERROR') {
 				$err = Get-ErrorToProcess -CurrentItem $effectiveItem -NoErrorLookupParameter $CurrentNoErrorLookup
 				if ($err) {
 					$errorDetails = [PSCustomObject]@{
-						ExceptionType = $err.Exception.GetType().FullName
-						Exception     = $err.Exception.Message
-						FullError     = $err
-						FailedCode    = $null
-						CallerInfo    = $null
+						ExceptionType   = $err.Exception.GetType().FullName
+						Exception       = $err.Exception.Message
+						FullError       = $err
+						FailedCode      = $null
+						CallerInfo      = $null
+						ExtendedDetails = $null
+					}
+					$extendedErrorInfo = Get-ExtendedErrorDetails -ErrorRecord $err
+					if ($extendedErrorInfo) {
+						$errorDetails.ExtendedDetails = $extendedErrorInfo
 					}
 					if (-not $DontClearErrorVariable) {
 						$Error.Clear()
@@ -423,16 +478,34 @@ function New-Log {
 					else {
 						$errorDetails.FailedCode = "N/A"
 					}
-					# Try to get caller info
+					# Try to get caller info with improved validation and better fallback logic
 					try {
 						$cs = Get-PSCallStack -EA SilentlyContinue
-						if ($cs) {
+						if ($cs -and $cs.Count -gt 1) {
 							$cf = $null
+							$fallbackFrame = $null
+							# Primary pass: Look for named functions.
 							for ($i = 1; $i -lt $cs.Count; $i++) {
-								if ($cs[$i].Command -ne 'New-Log' -and $cs[$i].Command -ne '<ScriptBlock>') {
-									$cf = $cs[$i]
+								$frame = $cs[$i]
+								$command = $frame.Command
+								$functionName = $frame.FunctionName
+								# Skip New-Log calls
+								if ($command -eq 'New-Log') {
+									continue
+								}
+								# Store first non-New-Log frame as fallback
+								if (-not $fallbackFrame) {
+									$fallbackFrame = $frame
+								}
+								# Prefer frames with actual function names
+								if ($functionName -and $functionName -ne '<ScriptBlock>' -and $functionName -ne 'New-Log') {
+									$cf = $frame
 									break
 								}
+							}
+							# Use fallback if no named function found
+							if (-not $cf -and $fallbackFrame) {
+								$cf = $fallbackFrame
 							}
 							if ($cf) {
 								$sn = if ($cf.ScriptName) {
@@ -441,39 +514,45 @@ function New-Log {
 								else {
 									'<NoScript>'
 								}
-								$fn = if ($cf.FunctionName -ne '<ScriptBlock>') {
-									"Function [$($cf.FunctionName)]"
+								$fn = if ($cf.FunctionName -and $cf.FunctionName -ne '<ScriptBlock>') {
+									$cf.FunctionName
 								}
 								else {
-									$sn
+									"<Script>"
 								}
-								$errorDetails.CallerInfo = "File [$sn], Line [$($cf.ScriptLineNumber)], Context [$fn]"
+								# Determine context type
+								$contextType = if ($cf.FunctionName -and $cf.FunctionName -ne '<ScriptBlock>') {
+									"Function"
+								}
+								else {
+									"Script"
+								}
+								$location = if ($cf.ScriptName) {
+									"Script"
+								}
+								else {
+									"Interactive"
+								}
+								$errorDetails.CallerInfo = "File [$sn], Line [$($cf.ScriptLineNumber)], Context [Function [$fn]]"
 							}
 						}
 					}
 					catch {
-						if ($script:ShowInternalVerbose) {
-							Write-Verbose "Could not get caller info: $($_.Exception.Message)"
-						}
+						Write-Warning "Could not get caller info: $($_.Exception.Message)"
 					}
-					$logEntryBase | Add-Member -MemberType NoteProperty -Name ErrorDetails -Value $errorDetails -Force
 					if (($null -eq $originalItem -or $originalItem -eq "") -or $originalItem -is [System.Management.Automation.ErrorRecord]) {
 						$effectiveItem = $errorDetails.Exception
 					}
 				}
-				elseif ($null -eq $effectiveItem -or $effectiveItem -eq "") {
-					$effectiveItem = "<ERROR Logged with Null/Empty Message>"
-					Write-Warning "ERROR level specified but no specific error context found for null/empty input."
+				elseif (-not $CurrentNoErrorLookup) {
+					# No error context found AND NoErrorLookup was NOT specified
+					if ($null -eq $effectiveItem -or $effectiveItem -eq "") {
+						$effectiveItem = "<ERROR Logged with Null/Empty Message>"
+						Write-Warning "ERROR level specified but no specific error context found for null/empty input."
+					}
 				}
 			}
-			# Format the message
-			$formattedTextMessage = Format-ItemForTextOutput -Item $effectiveItem
-			if ($originalItem -is [string] -or $null -eq $originalItem -or $CurrentLevel -eq 'ERROR') {
-				$logEntryBase.Message = $formattedTextMessage
-			}
-			else {
-				$logEntryBase.Message = $originalItem
-			}
+			$formattedMessage = Format-ItemForDisplay -Item $effectiveItem
 			# Console output
 			if (-not $CurrentNoConsole) {
 				$colorCode = $CurrentLevelColors[$CurrentLevel].ANSI
@@ -485,52 +564,46 @@ function New-Log {
 				else {
 					"[$timestamp][$CurrentLevel]"
 				}
-				if ($CurrentLevel -eq 'ERROR' -and $errorDetails) {
-					# $err is the ErrorRecord obtained from Get-ErrorToProcess and used to build $errorDetails
+				if (($CurrentLevel -eq 'ERROR' -or $CurrentLevel -eq 'EXTENDEDERROR') -and $errorDetails) {
 					$functionNameFromCaller = "N/A"
-					# coderowContext describes the nature of the block that *called* New-Log (e.g., testtest function)
 					$coderowContext = "Unknown"
 					if ($errorDetails.CallerInfo) {
-						# Parse $errorDetails.CallerInfo: "File [...], Line [...], Context [Function [name]]" or "Context [script.ps1]"
-						$contextMatchInCallerInfo = [regex]::Match($errorDetails.CallerInfo, "Context \[(.*?)\]$")
-						if ($contextMatchInCallerInfo.Success) {
-							$fullContextString = $contextMatchInCallerInfo.Groups[1].Value
-							if ($fullContextString.StartsWith("Function [") -and $fullContextString.EndsWith("]")) {
-								$functionNameFromCaller = $fullContextString.Substring("Function [".Length, $fullContextString.Length - "Function [".Length - "]".Length)
-								$coderowContext = "Function"
-							}
-							else {
-								$functionNameFromCaller = $fullContextString # Should be a script name like "MyScript.ps1"
+						# Extract function name from CallerInfo string: "File [...], Line [...], Context [Function [functionname]]"
+						$contextMatch = [regex]::Match($errorDetails.CallerInfo, "Context \[Function \[(.*?)\]\]$")
+						if ($contextMatch.Success) {
+							$functionNameFromCaller = $contextMatch.Groups[1].Value
+							$coderowContext = if ($functionNameFromCaller -eq "<Script>") { "Script" } else { "Function" }
+						}
+						else {
+							# Try alternate pattern for script context
+							$scriptMatch = [regex]::Match($errorDetails.CallerInfo, "Context \[Function \[<Script>\]\]$")
+							if ($scriptMatch.Success) {
+								$functionNameFromCaller = "<Script>"
 								$coderowContext = "Script"
 							}
 						}
 					}
 					$failedCodeLineNum = "N/A"
 					$failedCodeColNum = "N/A"
-					if ($err.InvocationInfo) {
-						# $err is the ErrorRecord for the actual failed command
+					if ($err -and $err.InvocationInfo) {
+						# Validate and sanitize line number
 						if ($null -ne $err.InvocationInfo.ScriptLineNumber -and $err.InvocationInfo.ScriptLineNumber -gt 0) {
-							$failedCodeLineNum = $err.InvocationInfo.ScriptLineNumber
+							$failedCodeLineNum = [Math]::Max(1, $err.InvocationInfo.ScriptLineNumber)
 						}
-						# OffsetInLine can be 0 (start of line) or not applicable for some errors.
-						# The example (2,299) implies a 1-based column, but OffsetInLine is 0-based for position.
-						# For display, if it's a valid number, we can use it. Let's keep it as is from InvocationInfo.
-						if ($null -ne $err.InvocationInfo.OffsetInLine) {
-							# OffsetInLine can be 0, which is valid
-							$failedCodeColNum = $err.InvocationInfo.OffsetInLine
+						# Validate and sanitize column number
+						if ($null -ne $err.InvocationInfo.OffsetInLine -and $err.InvocationInfo.OffsetInLine -ge 0) {
+							$failedCodeColNum = [Math]::Max(0, $err.InvocationInfo.OffsetInLine)
 						}
 					}
-					# coderowLocation describes where the *actual failing code* was located (e.g., in a Script file)
 					$coderowLocation = "Unknown"
-					if ($err.InvocationInfo -and $err.InvocationInfo.ScriptName) {
+					if ($err -and $err.InvocationInfo -and $err.InvocationInfo.ScriptName) {
 						$coderowLocation = "Script"
 					}
-					elseif ($err.InvocationInfo) {
-						# If InvocationInfo exists but no ScriptName, assume Interactive
+					elseif ($err -and $err.InvocationInfo) {
 						$coderowLocation = "Interactive"
 					}
 					$failedCodeText = if ($errorDetails.FailedCode -ne 'N/A') { $errorDetails.FailedCode } else { "N/A" }
-					$exceptionMsgText = $errorDetails.Exception # This is $err.Exception.Message
+					$exceptionMsgText = $errorDetails.Exception
 					if ($CurrentIsPSCore) {
 						$ansiReset = "`e[0m"
 						$blue = "`e[94m"
@@ -538,35 +611,37 @@ function New-Log {
 						$errorSuffix += "[${blue}CodeRow${ansiReset}: ($failedCodeLineNum,$failedCodeColNum) ($coderowContext,$coderowLocation)]"
 						$errorSuffix += "[${blue}FailedCode${ansiReset}: $failedCodeText]"
 						$errorSuffix += "[${blue}ExceptionMessage${ansiReset}: ${ansireset}`e[$($CurrentLevelColors[$CurrentLevel].ANSI)m$exceptionMsgText$ansireset]"
+						if ($CurrentLevel -eq 'EXTENDEDERROR' -and $errorDetails.ExtendedDetails) {
+							$errorSuffix += "[${blue}ExtendedErrorDetail${ansiReset}: `e[$($CurrentLevelColors[$CurrentLevel].ANSI)m$($errorDetails.ExtendedDetails)$ansireset]"
+						}
 					}
 					else {
 						$errorSuffix = " [Function: $functionNameFromCaller]"
 						$errorSuffix += "[CodeRow: ($failedCodeLineNum,$failedCodeColNum) ($coderowContext,$coderowLocation)]"
 						$errorSuffix += "[FailedCode: $failedCodeText]"
 						$errorSuffix += "[ExceptionMessage: $exceptionMsgText]"
+						if ($CurrentLevel -eq 'EXTENDEDERROR' -and $errorDetails.ExtendedDetails) {
+							$errorSuffix += "[ExtendedErrorDetail: $($errorDetails.ExtendedDetails)]"
+						}
 					}
-					# $formattedTextMessage is the user-provided message (e.g., "Something was broken..")
-					# or it defaults to the exception message if no user message was supplied to New-Log for this error.
-					Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content ($formattedTextMessage + $errorSuffix) -Color $psColor
+					Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content ($formattedMessage + $errorSuffix) -Color $psColor -CurrentTimestamp $timestamp -CurrentLevel $CurrentLevel -CurrentLevelColors $CurrentLevelColors -CurrentIsPSCore $CurrentIsPSCore -UseIndividualPrefixes $false
 				}
 				else {
-					# This handles:
-					# 1. Non-ERROR level log messages.
-					# 2. ERROR level messages where $errorDetails could not be populated (e.g., -NoErrorLookup was used
-					#    and no explicit ErrorObject or piped ErrorRecord was provided).
-					Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content $formattedTextMessage -Color $psColor
+					# Check if the formatted message is multi-line (like table output) and needs individual prefixes
+					$needsIndividualPrefixes = $formattedMessage -and $formattedMessage.Contains("`n") -and ($formattedMessage -split "`n").Count -gt 1
+					Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content $formattedMessage -Color $psColor -CurrentTimestamp $timestamp -CurrentLevel $CurrentLevel -CurrentLevelColors $CurrentLevelColors -CurrentIsPSCore $CurrentIsPSCore -UseIndividualPrefixes $needsIndividualPrefixes
 				}
-				#endregion MODIFIED CONSOLE OUTPUT FOR ERROR LEVEL
 			}
-			# File logging
 			if ($LogFilePath) {
 				$fileContent = $null
 				if ($LogFormat -eq "JSON") {
-					if ($originalItem -is [Management.Automation.ErrorRecord]) {
-						$logEntryBase.Message = $errorDetails.Exception
+					$logEntryBase = [PSCustomObject]@{
+						Timestamp = $timestamp
+						Level     = $CurrentLevel
+						Message   = if ($originalItem -is [Management.Automation.ErrorRecord]) { $errorDetails.Exception } else { $originalItem }
 					}
-					else {
-						$logEntryBase.Message = $originalItem
+					if ($errorDetails) {
+						$logEntryBase | Add-Member -MemberType NoteProperty -Name ErrorDetails -Value $errorDetails -Force
 					}
 					$logEntryForJson = $logEntryBase | Select-Object * -ExcludeProperty FullError
 					if ($logEntryBase.ErrorDetails) {
@@ -584,42 +659,61 @@ function New-Log {
 					}
 				}
 				else {
-					# TEXT format
 					$fileContent = "[$timestamp][$CurrentLevel]"
-					if (-not [string]::IsNullOrEmpty($formattedTextMessage)) {
-						$fileContent += " $formattedTextMessage"
+					if (-not [string]::IsNullOrEmpty($formattedMessage)) {
+						$fileContent += " $formattedMessage"
 					}
-					if ($CurrentLevel -eq 'ERROR' -and $errorDetails) {
-						$fileContent += "`r`n[$timestamp][ERROR Detail] Exception: $($errorDetails.Exception)"
+					if (($CurrentLevel -eq 'ERROR' -or $CurrentLevel -eq 'EXTENDEDERROR') -and $errorDetails) {
+						# Add error details in same format as console with enhanced caller detection
+						$functionNameFromCaller = "N/A"
+						$coderowContext = "Unknown"
 						if ($errorDetails.CallerInfo) {
-							$fileContent += "`r`n[$timestamp][ERROR Detail] CallerInfo: $($errorDetails.CallerInfo)"
+							$contextMatch = [regex]::Match($errorDetails.CallerInfo, "Context \[Function \[(.*?)\]\]$")
+							if ($contextMatch.Success) {
+								$functionNameFromCaller = $contextMatch.Groups[1].Value
+								$coderowContext = "Function"
+							}
+							else {
+								$scriptMatch = [regex]::Match($errorDetails.CallerInfo, "Context \[Function \[<Script>\]\]$")
+								if ($scriptMatch.Success) {
+									$functionNameFromCaller = "<Script>"
+									$coderowContext = "Script"
+								}
+							}
 						}
-						if ($errorDetails.FailedCode -ne 'N/A') {
-							$fileContent += "`r`n[$timestamp][ERROR Detail] FailedCode: $($errorDetails.FailedCode)"
+						$failedCodeLineNum = "N/A"
+						$failedCodeColNum = "N/A"
+						if ($err.InvocationInfo) {
+							if ($null -ne $err.InvocationInfo.ScriptLineNumber -and $err.InvocationInfo.ScriptLineNumber -gt 0) {
+								$failedCodeLineNum = [Math]::Max(1, $err.InvocationInfo.ScriptLineNumber)
+							}
+							if ($null -ne $err.InvocationInfo.OffsetInLine -and $err.InvocationInfo.OffsetInLine -ge 0) {
+								$failedCodeColNum = [Math]::Max(0, $err.InvocationInfo.OffsetInLine)
+							}
 						}
-						if ($errorDetails.FullError.ScriptStackTrace) {
-							$fileContent += "`r`n[$timestamp][ERROR Detail] StackTrace: $($errorDetails.FullError.ScriptStackTrace -replace '[\r\n]+',' | ')"
+						$coderowLocation = "Unknown"
+						if ($err.InvocationInfo -and $err.InvocationInfo.ScriptName) {
+							$coderowLocation = "Script"
+						}
+						elseif ($err.InvocationInfo) {
+							$coderowLocation = "Interactive"
+						}
+						$failedCodeText = if ($errorDetails.FailedCode -ne 'N/A') { $errorDetails.FailedCode } else { "N/A" }
+						$exceptionMsgText = $errorDetails.Exception
+						$fileContent += " [Function: $functionNameFromCaller]"
+						$fileContent += "[CodeRow: ($failedCodeLineNum,$failedCodeColNum) ($coderowContext,$coderowLocation)]"
+						$fileContent += "[FailedCode: $failedCodeText]"
+						$fileContent += "[ExceptionMessage: $exceptionMsgText]"
+						if ($CurrentLevel -eq 'EXTENDEDERROR' -and $errorDetails.ExtendedDetails) {
+							$fileContent += "[ExtendedErrorDetail: $($errorDetails.ExtendedDetails)]"
 						}
 					}
 				}
 				Write-LogToFile -ContentToWrite $fileContent -LogRotationSizeMB $LogRotationSizeMB
 			}
-			# Return object if requested
+			# Return the EXACT original object if requested
 			if ($CurrentReturnObject) {
-				# Add UsedANSI property for testing
-				if (-not $CurrentNoConsole -and $CurrentIsPSCore) {
-					$logEntryBase | Add-Member -MemberType NoteProperty -Name UsedANSI -Value $true -Force
-				}
-				$logEntryBase.Message = $originalItem
-				# Add properties for testing
-				$logEntryBase | Add-Member -MemberType NoteProperty -Name LogRecordCount -Value $script:LogRecordCount -Force
-				# Always add the RotatedFiles property if log rotation is enabled
-				if ($LogRotationSizeMB -gt 0) {
-					if ($script:LogRotated -or $script:RotatedFiles.Count -gt 0) {
-						$logEntryBase | Add-Member -MemberType NoteProperty -Name RotatedFiles -Value $script:RotatedFiles -Force
-					}
-				}
-				return $logEntryBase
+				return $originalItem
 			}
 			else {
 				return $null
@@ -641,14 +735,10 @@ function New-Log {
 			if ($null -eq $ItemsToProcess -or $ItemsToProcess.Count -eq 0) {
 				return $null
 			}
-			$timestamp = Get-Date -Format $CurrentDateFormat
+			$timestamp = Get-Date -Format $CurrentDateFormat -ErrorAction Stop
 			$objectCount = $ItemsToProcess.Count
-			# File logging for grouped items
 			if ($LogFilePath) {
 				if ($LogFormat -eq "JSON") {
-					if ($script:ShowInternalVerbose) {
-						Write-Verbose "Logging $objectCount grouped items as JSON Lines."
-					}
 					foreach ($item in $ItemsToProcess) {
 						$entryBase = [PSCustomObject]@{
 							Timestamp = $timestamp
@@ -671,14 +761,16 @@ function New-Log {
 					}
 				}
 				else {
-					# TEXT format
-					if ($script:ShowInternalVerbose) {
-						Write-Verbose "Logging $objectCount grouped items as TEXT table."
+					# Choose format based on item count: 4+ items = vertical (Format-List), fewer = horizontal (Format-Table)
+					if ($objectCount -ge 4) {
+						$formattedString = ($ItemsToProcess | Format-List | Out-String).Trim()
 					}
-					$tableString = ($ItemsToProcess | Format-Table -AutoSize | Out-String).Trim()
+					else {
+						$formattedString = ($ItemsToProcess | Format-Table -AutoSize | Out-String).Trim()
+					}
 					$fileContent = "[$timestamp][$CurrentLevel] Start of grouped items ($objectCount):`r`n"
-					$tableLines = $tableString -split "`r?`n"
-					foreach ($line in $tableLines) {
+					$formattedLines = $formattedString -split "`r?`n"
+					foreach ($line in $formattedLines) {
 						$fileContent += "[$timestamp][$CurrentLevel] $line`r`n"
 					}
 					$fileContent += "[$timestamp][$CurrentLevel] End of grouped items."
@@ -687,9 +779,6 @@ function New-Log {
 			}
 			# Console output for grouped items
 			if (-not $CurrentNoConsole) {
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Displaying $objectCount grouped items."
-				}
 				$colorCode = $CurrentLevelColors[$CurrentLevel].ANSI
 				$psColor = $CurrentLevelColors[$CurrentLevel].PS
 				$ansiReset = "`e[0m"
@@ -699,34 +788,24 @@ function New-Log {
 				else {
 					"[$timestamp][$CurrentLevel]"
 				}
-				Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content "Displaying $objectCount grouped items:" -Color $psColor
-				$tableString = ($ItemsToProcess | Format-Table -AutoSize | Out-String).Trim()
-				Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content $tableString -Color $psColor
+				Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content "Displaying $objectCount grouped items:" -Color $psColor -CurrentTimestamp $timestamp -CurrentLevel $CurrentLevel -CurrentLevelColors $CurrentLevelColors -CurrentIsPSCore $CurrentIsPSCore -UseIndividualPrefixes $false
+				if ($objectCount -ge 4) {
+					$formattedString = ($ItemsToProcess | Format-List | Out-String).Trim()
+				}
+				else {
+					$formattedString = ($ItemsToProcess | Format-Table -AutoSize | Out-String).Trim()
+				}
+				# For grouped output, we want each line to have its own prefix
+				Write-PrefixedLinesToConsole -Prefix $consolePrefix -Content $formattedString -Color $psColor -CurrentTimestamp $timestamp -CurrentLevel $CurrentLevel -CurrentLevelColors $CurrentLevelColors -CurrentIsPSCore $CurrentIsPSCore -UseIndividualPrefixes $true
 			}
-			# Return summary object if requested
 			if ($CurrentReturnObject) {
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Returning summary object for $objectCount grouped items."
+				# Return the original objects as an array
+				if ($ItemsToProcess -is [System.Collections.Generic.List[object]]) {
+					return $ItemsToProcess.ToArray()
 				}
-				$groupedResult = [PSCustomObject]@{
-					Timestamp    = $timestamp
-					Level        = $CurrentLevel
-					Message      = "Collection of $objectCount objects."
-					GroupedItems = $ItemsToProcess
+				else {
+					return @($ItemsToProcess)
 				}
-				# Add properties for testing
-				$groupedResult | Add-Member -MemberType NoteProperty -Name LogRecordCount -Value $script:LogRecordCount -Force
-				# Always add the RotatedFiles property if log rotation is enabled
-				if ($LogRotationSizeMB -gt 0) {
-					if ($script:LogRotated -or $script:RotatedFiles.Count -gt 0) {
-						$groupedResult | Add-Member -MemberType NoteProperty -Name RotatedFiles -Value $script:RotatedFiles -Force
-					}
-				}
-				if (-not $CurrentNoConsole -and $CurrentIsPSCore) {
-					# Corrected logic for UsedANSI on grouped object
-					$groupedResult | Add-Member -MemberType NoteProperty -Name UsedANSI -Value $true -Force
-				}
-				return $groupedResult
 			}
 			else {
 				return $null
@@ -734,7 +813,7 @@ function New-Log {
 		}
 		#endregion Process-GroupedLogItems
 	}
-	Process {
+	process {
 		$currentItem = $Message
 		# Skip VERBOSE level messages if not enabled
 		if ($Level -eq "VERBOSE") {
@@ -746,78 +825,34 @@ function New-Log {
 		# Handle pipeline input
 		if ($script:IsPipelineInput) {
 			$script:PipelineItemCounter++
-			# Collection modes
-			if ($GroupObjects) {
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Collect G #$($script:PipelineItemCounter)."
-				}
+			if (-not $NoAutoGroup) {
 				$script:ObjectCollection.Add($currentItem)
 				return
-			}
-			elseif (-not $NoAutoGroup) {
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Collect A #$($script:PipelineItemCounter)."
-				}
-				$script:ObjectCollection.Add($currentItem)
-				return
-			}
-			# Direct processing for pipeline with -NoAutoGroup
-			if ($script:ShowInternalVerbose) {
-				Write-Verbose "Proc NAG #$($script:PipelineItemCounter)."
 			}
 		}
 		# Process immediately if not pipeline OR pipeline with -NoAutoGroup
 		try {
-			if ($script:ShowInternalVerbose) {
-				Write-Verbose "Proc single item Process."
-			}
 			$result = Process-SingleLogItem -ItemToProcess $currentItem -CurrentLevel $Level -CurrentDateFormat $DateFormat -CurrentLevelColors $script:LevelColors -CurrentIsPSCore $script:isPSCore -CurrentNoConsole $NoConsole -CurrentReturnObject $ReturnObject -CurrentNoErrorLookup $NoErrorLookup -DontClearErrorVariable $DontClearErrorVariable.IsPresent -ErrorAction Stop
 			if ($ReturnObject -and $null -ne $result) {
-				$result
+				Write-Output $result  # Explicitly use Write-Output to ensure clean pipeline behavior
 			}
 		}
 		catch {
 			Write-Error "Error processing single item Process: $($_.Exception.Message)"
 		}
 	} # End Process block
-	End {
-		if ($script:ShowInternalVerbose) {
-			Write-Verbose "Entering End block. Items: $($script:PipelineItemCounter)."
-		}
+	end {
 		try {
-			# Skip VERBOSE level messages if not enabled
 			if ($Level -eq "VERBOSE") {
 				$prefs = try { Get-Variable -Name VerbosePreference -Scope 1 -ValueOnly -ErrorAction Stop } catch { $null }
 				if ($prefs -ne [Management.Automation.ActionPreference]::Continue) {
-					if ($script:ShowInternalVerbose) {
-						Write-Verbose "Skip final VERBOSE."
-					}
 					return
 				}
 			}
 			$processedGroup = $false
 			$result = $null
-			# Handle group objects
-			if ($GroupObjects -and $script:ObjectCollection.Count -gt 0) {
-				$itemCount = $script:ObjectCollection.Count
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Proc G ($itemCount) End."
-				}
-				try {
-					$result = Process-GroupedLogItems -ItemsToProcess $script:ObjectCollection -CurrentLevel $Level -CurrentDateFormat $DateFormat -CurrentLevelColors $script:LevelColors -CurrentIsPSCore $script:isPSCore -CurrentNoConsole $NoConsole -CurrentReturnObject $ReturnObject -ErrorAction Stop
-					$processedGroup = $true
-				}
-				catch {
-					Write-Error "Error processing GroupedLogItems: $($_.Exception.Message)"
-					$processedGroup = $false
-				}
-			}
 			# Handle auto-grouped pipeline input
-			elseif ($script:IsPipelineInput -and -not $NoAutoGroup -and $script:PipelineItemCounter -gt 1) {
-				$itemCount = $script:ObjectCollection.Count
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Proc A>1 ($itemCount) End."
-				}
+			if ($script:IsPipelineInput -and -not $NoAutoGroup -and $script:PipelineItemCounter -gt 1) {
 				try {
 					$result = Process-GroupedLogItems -ItemsToProcess $script:ObjectCollection -CurrentLevel $Level -CurrentDateFormat $DateFormat -CurrentLevelColors $script:LevelColors -CurrentIsPSCore $script:isPSCore -CurrentNoConsole $NoConsole -CurrentReturnObject $ReturnObject -ErrorAction Stop
 					$processedGroup = $true
@@ -829,9 +864,6 @@ function New-Log {
 			}
 			# Handle single pipeline item with auto-grouping enabled
 			elseif ($script:IsPipelineInput -and -not $NoAutoGroup -and $script:PipelineItemCounter -eq 1) {
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Proc A=1 (1) End."
-				}
 				try {
 					$result = Process-SingleLogItem -ItemToProcess $script:ObjectCollection[0] -CurrentLevel $Level -CurrentDateFormat $DateFormat -CurrentLevelColors $script:LevelColors -CurrentIsPSCore $script:isPSCore -CurrentNoConsole $NoConsole -CurrentReturnObject $ReturnObject -CurrentNoErrorLookup $NoErrorLookup -DontClearErrorVariable $DontClearErrorVariable.IsPresent -ErrorAction Stop
 					$processedGroup = $true
@@ -841,20 +873,15 @@ function New-Log {
 					$processedGroup = $false
 				}
 			}
-			# Return result object if requested
 			if ($processedGroup -and $ReturnObject -and $null -ne $result) {
-				$result
+				Write-Output $result
 			}
 		}
 		catch {
 			Write-Error "Error during End block: $($_.Exception.Message)"
 		}
 		finally {
-			# Restore console encoding
 			if ($null -ne $script:OriginalConsoleEncoding -and [Console]::OutputEncoding -ne $script:OriginalConsoleEncoding) {
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Restore console encoding."
-				}
 				try {
 					[Console]::OutputEncoding = $script:OriginalConsoleEncoding
 				}
@@ -862,12 +889,8 @@ function New-Log {
 					Write-Warning "Failed restore console encode: $($_.Exception.Message)"
 				}
 			}
-			# Clear object collection
 			if ($script:ObjectCollection) {
 				$script:ObjectCollection.Clear()
-				if ($script:ShowInternalVerbose) {
-					Write-Verbose "Cleared object collection."
-				}
 			}
 		}
 	} # End End block
