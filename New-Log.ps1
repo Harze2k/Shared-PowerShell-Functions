@@ -107,29 +107,47 @@ function New-Log {
 			New-Log "Failed" -Level ERROR
 		}
 		[2025-07-06 07:10:30.174][ERROR] Failed [Function: test-error][CodeRow: (2,4) (Function,Script)][FailedCode: Get-ChildItem -Path C:\Nonexistingpath -ea Stop][ExceptionMessage: Cannot find path 'C:\Nonexistingpath' because it does not exist.]
-    .NOTES
-        Author: Harze2k
-        Date:   2025-07-06
-        Version: 4.0 (Completely redesigned complex object formatting to use Format-Table for clean output)
-		- MAJOR: -ReturnObject now returns the ORIGINAL input object instead of log metadata
-        - MAJOR: Completely redesigned complex object formatting to use Format-Table for clean output
-		- MAJOR: Added -Level EXTENDEDERROR for even more error details.
-		- Removed all internal Write-Verbose messeges. (Not needed).
-        - Hashtables and custom objects now display as proper tables in console output
-        - Table output (multiple lines) now counts as single logical entry
-        - Improved user experience: pipeline operations with -ReturnObject now work intuitively
-        - Console output for complex objects is now much more readable and professional
-        - Fixed GroupedItems being empty in grouped pipeline results by properly converting List[object] to array
-        - Added validation for DateFormat parameter with 6 most common datetime formats
-        - Added automatic conversion of relative log file paths to absolute paths using current location
-        - Fixed multi-line object output to show each line with proper timestamp and level prefix
-        - Added validation for error line numbers and column offsets to prevent negative values
-        - Internal Write-Verbose messages only show if -Verbose is passed *directly* to New-Log.
-        - Handles null/empty string input gracefully.
-        - Uses UTF8 encoding without BOM for log files.
-        - Fixed log rotation to properly track rotated files
-        - Removed unused IsPSCore parameter from Write-PrefixedLinesToConsole helper.
-        - Improved object formatting to match natural PowerShell output with timestamp/level prefixes
+	.NOTES
+    Author: Harze2k
+    Version: 5.1
+	Date: 2025-12-01
+	
+    VERSION HISTORY:
+    ================
+    v5.1 - Fixed error context capture
+    ----------------------------------
+    BUG FIXES:
+    - Restored automatic error capture at parameter binding time using default value
+    $ErrorObject = $(if ($global:Error.Count -gt 0) { $global:Error[0] } else { $null })
+    This ensures errors are captured before any function code executes.
+    - Added multi-scope lookup for $_ variable (scopes 1-5) in Get-ErrorContext
+    Nested helper functions meant catch block $_ was at scope 3-5, not scope 1.
+    - Updated Get-ErrorContext to receive ExplicitErrorObject parameter
+    - Updated Process-SingleItem to pass CapturedErrorObject through call chain
+    - Fixed both Process-SingleItem calls (process and end blocks) to include error object
+    
+    v5.0 - Optimized and refactored
+    -------------------------------
+    BUG FIXES:
+    - Removed duplicate value in DateFormat ValidateSet ('yyyy-MM-dd HH:mm:ss.fff' appeared twice)
+    - Fixed parameter positions: Position 10 was skipped (went 9 to 11), now sequential 0-12
+    - Removed $script: scope variables causing state leakage between function calls
+    - Removed spurious Write-Warning in Get-ErrorToProcess that triggered on normal code paths
+    - Stopped mutating $LogFilePath parameter during execution; uses $resolvedLogPath instead
+    - Fixed console encoding restoration that could fail if encoding was never changed
+    PARAMETER RENAMES (breaking changes):
+    - DontClearErrorVariable -> PreserveErrorVariable (removes confusing double negative)
+    - ForcedLogFile -> OverwriteLogFile (clearer intent)
+    OPTIMIZATIONS:
+    - Consolidated ANSI prefix generation into single Get-ConsolePrefix helper
+    - Consolidated error suffix formatting into single Get-ErrorDetailsSuffix helper
+    - Reduced helper function count from 7 to 6 by merging related functionality
+    - Simplified property counting in Format-ObjectForDisplay
+    - Reduced code from ~560 to ~450 lines by removing redundant logic
+    - Changed rotatedFiles from array concatenation to List[string] for better performance
+    - Consolidated timestamp generation: single Get-Date call per log entry
+    - Simplified conditionals using -in operator instead of chained -or comparisons
+    - Removed all internal Write-Verbose messages (not needed)
     #>
 	[CmdletBinding()]
 	param(
