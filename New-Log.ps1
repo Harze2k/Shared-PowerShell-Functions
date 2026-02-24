@@ -163,7 +163,7 @@ function New-Log {
 			'dd.MM.yyyy HH:mm:ss.fff',
 			'yyyyMMdd_HHmmss.fff'
 		)][string]$DateFormat = 'yyyy-MM-dd HH:mm:ss.fff',
-		[Parameter()]$ErrorObject = $(if ($global:error.Count -gt 0) { $global:error[0] } else { $null })
+		[Parameter()]$ErrorObject = $(if ($global:error.Count -and $global:error.Count -gt 0) { $global:error[0] } else { $null })
 	)
 	begin {
 		$script:isPSCore = $PSVersionTable.PSVersion.Major -ge 6
@@ -230,7 +230,7 @@ function New-Log {
 				return
 			}
 			$lines = $Content -split "\r?\n"
-			$nonEmptyLines = $lines | Where-Object { $_ -ne '' }
+			$nonEmptyLines = @($lines | Where-Object { $_ -ne '' })
 			if ($nonEmptyLines.Count -eq 0) {
 				Write-Host $Prefix -ForegroundColor $Color
 				return
@@ -424,10 +424,10 @@ function New-Log {
 						$propertyCount = $Item.Keys.Count
 					}
 					elseif ($Item -is [PSCustomObject]) {
-						$propertyCount = ($Item.PSObject.Properties | Where-Object { $_.MemberType -eq 'NoteProperty' }).Count
+						$propertyCount = @($Item.PSObject.Properties | Where-Object { $_.MemberType -eq 'NoteProperty' }).Count
 					}
 					else {
-						$propertyCount = ($Item | Get-Member -MemberType Properties | Where-Object { $_.Name -notlike '__*' }).Count
+						$propertyCount = @($Item | Get-Member -MemberType Properties | Where-Object { $_.Name -notlike '__*' }).Count
 					}
 					if ($propertyCount -ge 4) {
 						return ($Item | Format-List | Out-String).Trim()
@@ -538,8 +538,8 @@ function New-Log {
 					else { 'N/A' }
 					# Build structured CallerInfo hashtable - direct property access later, no regex
 					try {
-						$cs = Get-PSCallStack -EA SilentlyContinue
-						if ($cs -and $cs.Count -gt 1) {
+						$cs = @(Get-PSCallStack -EA SilentlyContinue)
+						if ($cs.Count -gt 1) {
 							$cf = $null
 							$fallbackFrame = $null
 							for ($i = 1; $i -lt $cs.Count; $i++) {
