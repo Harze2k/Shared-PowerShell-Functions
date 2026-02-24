@@ -186,12 +186,14 @@ function New-Log {
 		$script:RotatedFiles = @()    # Track rotated files for testing
 		$script:LogRotated = $false   # Flag to indicate if rotation occurred
 		try {
-			$script:OriginalConsoleEncoding = [Console]::OutputEncoding
-			[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    		if ($Host.Name -ne 'Windows PowerShell ISE Host' -and $Host.Name -ne 'ServerRemoteHost') {
+        		$script:OriginalConsoleEncoding = [Console]::OutputEncoding
+        		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    		}
 		}
 		catch {
-			Write-Warning "Failed to set console output encoding to UTF8: $($_.Exception.Message)"
-		}
+    		# Silently ignore - no console handle available (ISE, scheduled tasks, etc.)
+		}	
 		if ($LogFilePath -and $AppendTimestampToFile) {
 			try {
 				# Convert relative path to absolute path if needed before processing timestamp
@@ -912,4 +914,5 @@ function New-Log {
 			}
 		}
 	} # End End block
+
 }
