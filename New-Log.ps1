@@ -96,6 +96,7 @@ function New-Log {
 
         VERSION HISTORY:
         ================
+		v5.3 - Bug fixes
         v5.2 - Bug fixes, DRY refactor, EXTENDEDERROR improvements
         ----------------------------------------------------------------
         BUG FIXES:
