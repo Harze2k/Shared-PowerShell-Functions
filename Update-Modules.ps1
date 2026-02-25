@@ -4,10 +4,17 @@
 #region Check-PSResourceRepository
 <#
 Author: Harze2k
-Date:   2025-05-21
-Version: 3.7 (10x speed increase!)
-	-Fixed a loop issue that caused the Find-Module to slow down.
+Date:   2026-02-25
+Version: 4.0 (Parallel module installation!)
+	-Update-Modules now installs modules in parallel using ForEach-Object -Parallel.
+	-3-phase architecture: pre-processing (sequential) -> parallel install -> post-processing/cleaning (sequential).
+	-ShouldProcess checks evaluated on main thread before dispatching to parallel runspaces.
+	-Throttle limit scales with CPU cores: Min(moduleCount, Max(4, ProcessorCount * 2)).
+	-Progress reporting with ETA during parallel installation.
+	-Cleaning still runs sequentially to avoid filesystem conflicts.
 	---Older ---
+	Version 3.7 (2025-05-21):
+	-Fixed a loop issue that caused the Find-Module to slow down. (10x speed increase)
 	-Fixed PreRelease logic in several functions.
 	-Now we try to parse the PreRelease version also from .XML files.
 	-Fixed output from several functions to be relevant and less spammy.
@@ -18,219 +25,131 @@ Version: 3.7 (10x speed increase!)
 	-Finds basically all modules that can be found.
 	-Included help and guidelines.
 	-Progress reporting while parallel jobs.
-Sample output:
-...
-[2025-05-21 14:54:15.769][SUCCESS] [PowerShellGet] Successfully found module info from the [.PSD1] file. Version [2.2.5]
-[2025-05-21 14:54:15.772][SUCCESS] [Microsoft.PowerShell.Operation.Validation] Successfully found module info from the [.PSD1] file. Version [1.0.1]
-[2025-05-21 14:54:15.775][INFO] Phase 2 complete. Parallel processing took 0:00:02,9742846. Collected 265 raw entries.
-[2025-05-21 14:54:15.775][INFO] Phase 3: Starting post-processing and aggregation...
-[2025-05-21 14:54:15.782][INFO] Reduced to 229 unique entries after initial grouping.
-[2025-05-21 14:54:15.823][INFO] Phase 3 (Aggregation) complete in 0:00:00,0467479.
-[2025-05-21 14:54:15.824][SUCCESS] Get-ModuleInfo completed. Total duration: 0:00:03,0958568. Found 110 modules.
-[2025-05-21 14:54:15.849][INFO] Starting online version pre-fetching for up to 110 modules...
-[2025-05-21 14:54:15.893][INFO] Waiting for 110 pre-fetch jobs to complete (Timeout per job: 120s)...
-[2025-05-21 14:54:16.431][INFO] Pre-fetch progress: 7/110 completed (6.4%), 30 still running
-[2025-05-21 14:54:16.711][INFO] Pre-fetch progress: 19/110 completed (17.3%), 34 still running
-[2025-05-21 14:54:16.966][INFO] Pre-fetch progress: 33/110 completed (30%), 36 still running
-[2025-05-21 14:54:17.252][INFO] Pre-fetch progress: 46/110 completed (41.8%), 40 still running
-[2025-05-21 14:54:17.783][INFO] Pre-fetch progress: 68/110 completed (61.8%), 42 still running
-[2025-05-21 14:54:18.038][INFO] Pre-fetch progress: 90/110 completed (81.8%), 20 still running
-[2025-05-21 14:54:18.795][INFO] Pre-fetch progress: 103/110 completed (93.6%), 7 still running
-[2025-05-21 14:54:19.810][INFO] Pre-fetch progress: 110/110 completed (100%), 0 still running
-[2025-05-21 14:54:19.820][INFO] Pre-fetch complete: 110/110 processed, 0 timeouts
-[2025-05-21 14:54:19.820][INFO] Online version pre-fetching complete. Cached data for 110 modules. Timeouts: 0
-[2025-05-21 14:54:19.821][INFO] Pre-fetching (Stage 1) took: 0:00:03,9710021
-[2025-05-21 14:54:19.824][SUCCESS] Starting parallel update comparison for 110 modules (Throttle: 64)...
-[2025-05-21 14:54:19.905][INFO] Progress: 5% (8/110) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:01
-[2025-05-21 14:54:19.905][INFO] Progress: 5% (8/110) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:01
-[2025-05-21 14:54:19.930][INFO] Progress: 11% (12/110) | Updates: 0, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:19.934][SUCCESS] [BurntToast] Update found: Local '0.8.5' -> Online '1.0.0-Preview2'. 1 outdated paths.
-[2025-05-21 14:54:19.937][INFO] Progress: 15% (20/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:19.957][INFO] Progress: 19% (26/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:19.957][INFO] Progress: 20% (26/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:19.958][INFO] Progress: 22% (27/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:19.958][INFO] Progress: 21% (27/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:19.979][INFO] Progress: 26% (33/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:19.999][INFO] Progress: 32% (37/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.022][INFO] Progress: 43% (51/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.076][INFO] Progress: 65% (73/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.095][INFO] Progress: 69% (81/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.095][INFO] Progress: 70% (81/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.095][INFO] Progress: 71% (81/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.112][INFO] Progress: 75% (86/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.134][INFO] Progress: 82% (91/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.139][INFO] Progress: 86% (99/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.161][INFO] Progress: 97% (109/110) | Updates: 1, Errors: 0 | Elapsed: 00:00 | ETA: 00:00
-[2025-05-21 14:54:20.162][INFO] Pre-fetching (Stage 1) duration: 0:00:03,9710021
-[2025-05-21 14:54:20.163][INFO] Comparison (Stage 2) duration: 0:00:00,3410224
-[2025-05-21 14:54:20.164][SUCCESS] Completed check of 110 modules in 0:00:04,3120245. Found 1 modules needing updates.
-[2025-05-21 14:54:20.168][INFO] [BurntToast] Starting update process for 1 modules.
-[2025-05-21 14:54:22.290][SUCCESS] [BurntToast] Successfully saved version [1.0.0-Preview2] via Save-PSResource. Expected path: 'C:\Program Files\PowerShell\Modules\BurntToast\1.0.0'
-[2025-05-21 14:54:22.301][SUCCESS] [BurntToast] Successfully updated to version [1.0.0-Preview2] for all target destinations (C:\Program Files\PowerShell\Modules\BurntToast).
-[2025-05-21 14:54:22.311][SUCCESS] Update process finished for 1 modules. Successful Updates: 1, Failed/Partial Updates: 0.
-ModuleName           : BurntToast
-NewVersionPreRelease : 1.0.0-Preview2
-NewVersion           : 1.0.0
-UpdatedPaths         : {C:\Program Files\PowerShell\Modules\BurntToast}
-FailedPaths          : {}
-OverallSuccess       : True
-CleanedPaths         :
 #>
 function Check-PSResourceRepository {
-	<#
-	.SYNOPSIS
-	Ensures required PowerShell repositories (PSGallery, NuGetGallery, NuGet) are registered, trusted, and prioritized correctly using PSResourceGet cmdlets. Optionally installs or updates core dependency modules.
-	.DESCRIPTION
-	This function performs several setup tasks for reliable PowerShell module management using PSResourceGet cmdlets:
-	1. Checks and enables the TLS 1.2 security protocol for the current session if not already enabled.
-	2. Verifies if the PSGallery repository is registered. If it is, it ensures its InstallationPolicy is set to Trusted. This initial trust setting for PSGallery is performed using `Set-PSRepository` (a legacy cmdlet from the PowerShellGet module) as a robust way to ensure PSGallery is trusted before `Microsoft.PowerShell.PSResourceGet` cmdlets, which might be missing, are used or installed.
-	3. (Optional) If -ImportDependencies is specified, or if core PSResourceGet cmdlets (like `Register-PSResourceRepository`) are missing, it attempts to install or update the latest pre-release versions of 'Microsoft.PowerShell.PSResourceGet' and 'PowerShellGet' from PSGallery. It uses `Install-PSResource` if available, falling back to `Install-Module`. Modules are installed with `Scope = AllUsers` and then imported.
-	4. Registers or configures the PSGallery, NuGetGallery, and NuGet repositories.
-	- For PSGallery: If it exists, `Set-PSResourceRepository` is used to ensure it has Priority 30 and is Trusted. If it doesn't exist, it's registered using `Register-PSResourceRepository` with these settings.
-	- For NuGetGallery and NuGet: `Register-PSResourceRepository` is used to register them (or update if already existing using -Force) with specific URIs, priorities (NuGetGallery: 40, NuGet: 50), and as Trusted. NuGet repository is configured to use API version 'v2'.
-	5. Requires administrative privileges to modify repositories and install modules for AllUsers scope.
-	It utilizes internal helper functions (Install-RequiredModulesInternal, Register-ConfigureRepositoryInternal) and logs actions using a `New-Log` function (assumed to be available in the scope).
-	.PARAMETER ImportDependencies
-	If specified, forces the function to check for, install/update, and import the 'Microsoft.PowerShell.PSResourceGet' and 'PowerShellGet' modules, even if the core cmdlets seem available.
-	.PARAMETER ForceInstall
-	Used in conjunction with -ImportDependencies. If specified, forces a reinstallation (using -Reinstall or -Force parameters of the underlying cmdlets) of the dependency modules ('Microsoft.PowerShell.PSResourceGet', 'PowerShellGet'), even if they appear to be up-to-date.
-	.INPUTS
-	None. This function does not accept pipeline input.
-	.OUTPUTS
-	None. This function primarily modifies system state (repositories, installed modules) and outputs log messages via the `New-Log` function.
-	.EXAMPLE
-	PS C:\> Check-PSResourceRepository
-	Checks and configures the standard PowerShell repositories (PSGallery, NuGetGallery, NuGet). If required PSResourceGet cmdlets are missing, it will attempt to install them first. Requires Administrator privileges.
-	.EXAMPLE
-	PS C:\> Check-PSResourceRepository -ImportDependencies
-	Checks and configures repositories, and also explicitly ensures the latest pre-release versions of 'Microsoft.PowerShell.PSResourceGet' and 'PowerShellGet' are installed and imported.
-	.EXAMPLE
-	PS C:\> Check-PSResourceRepository -ImportDependencies -ForceInstall
-	Checks and configures repositories, and forces a re-installation of the latest pre-release versions of 'Microsoft.PowerShell.PSResourceGet' and 'PowerShellGet'.
-	.NOTES
-	- Requires Administrator privileges to run successfully as it modifies system-wide repository settings and installs modules to the AllUsers scope.
-	- Depends on an external `New-Log` function for logging operations. This function must be available in the calling scope.
-	- Assumes network connectivity to PSGallery and NuGet sources for repository registration and module installation.
-	- Primarily uses `*-PSResource*` cmdlets for repository management and module installation. It may fall back to older `*-Module` and `*-PSRepository` cmdlets for initial dependency bootstrapping (installing `Microsoft.PowerShell.PSResourceGet`) or specific PSGallery trust settings if `Microsoft.PowerShell.PSResourceGet` is not yet available.
-	- Installs dependency modules ('Microsoft.PowerShell.PSResourceGet', 'PowerShellGet') with `Scope = AllUsers`.
-	.LINK
-	Set-PSRepository
-	Get-PSRepository
-	Register-PSResourceRepository
-	Set-PSResourceRepository
-	Get-PSResourceRepository
-	Install-PSResource
-	Install-Module
-	Find-Module
-	Import-Module
-	#>
 	[CmdletBinding()]
 	param (
-		[switch]$ImportDependencies,
-		[switch]$ForceInstall
+		[switch]$ImportDependencies, # Force re-import of PSResourceGet module even if commands exist
+		[switch]$ForceInstall, # Force reinstall of PSResourceGet (PS5.1 only)
+		[int]$TimeoutSeconds = 30
 	)
-	# --- Internal Helper Function: Install-RequiredModulesInternal ---
-	function Install-RequiredModulesInternal {
+	$isPSCore = $PSVersionTable.PSVersion.Major -ge 6
+	$hasPSResourceGet = [bool](Get-Command -Name 'Get-PSResourceRepository' -ErrorAction SilentlyContinue)
+	New-Log "PowerShell version: $($PSVersionTable.PSVersion) | PSCore: $isPSCore | PSResourceGet available: $hasPSResourceGet"
+	function Invoke-WithTimeout {
 		[CmdletBinding()]
 		param (
-			[switch]$ForceReinstall
+			[Parameter(Mandatory)][scriptblock]$ScriptBlock,
+			[int]$Timeout = 30,
+			[string]$OperationName = 'Operation'
 		)
+		$runspace = $null
+		$powershell = $null
 		try {
-			$psGallery = Get-PSRepository -Name 'PSGallery' -ErrorAction SilentlyContinue -Verbose:$false
-			if ($null -eq $psGallery -or -not $psGallery.Trusted) {
-				New-Log "Setting PSGallery repository to Trusted."
-				Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted -ErrorAction Stop -Verbose:$false
-				New-Log "PSGallery repository set to trusted." -Level SUCCESS
+			$runspace = [runspacefactory]::CreateRunspace()
+			$runspace.Open()
+			$powershell = [powershell]::Create()
+			$powershell.Runspace = $runspace
+			[void]$powershell.AddScript($ScriptBlock)
+			$handle = $powershell.BeginInvoke()
+			$completed = $handle.AsyncWaitHandle.WaitOne($Timeout * 1000)
+			if (-not $completed) {
+				New-Log "$OperationName timed out after $Timeout seconds." -Level WARNING
+				$powershell.Stop()
+				return $null
 			}
-			else {
-				New-Log "PSGallery repository is already trusted."
+			if ($powershell.HadErrors) {
+				$errorMsg = $powershell.Streams.Error | ForEach-Object { $_.ToString() } | Join-String -Separator '; '
+				New-Log "$OperationName had errors: $errorMsg" -Level WARNING
 			}
-			$moduleList = @(
-				@{ Name = 'Microsoft.PowerShell.PSResourceGet'; Prerelease = $true }
-				@{ Name = 'PowerShellGet'; Prerelease = $true }
-			)
+			return $powershell.EndInvoke($handle)
 		}
 		catch {
-			New-Log "Failed to set PSGallery repository to Trusted." -Level ERROR
+			New-Log "$OperationName failed: $($_.Exception.Message)" -Level ERROR
+			return $null
 		}
-		$usePSResourceCmdlets = Get-Command Install-PSResource -ErrorAction SilentlyContinue -Verbose:$false
-		$moduleSuccess = $true
-		foreach ($moduleInfo in $moduleList) {
-			$moduleName = $moduleInfo.Name
-			$installPrerelease = $moduleInfo.Prerelease
-			$foundModule = Find-Module -Name $moduleName -Repository @('PSGallery') -AllowPrerelease:$installPrerelease -ErrorAction SilentlyContinue -Verbose:$false
-			$latestVersion = ($foundModule | Sort-Object Version -Descending | Select-Object -First 1).Version
-			$isInstalled = $false
-			if ($latestVersion) {
-				$isInstalled = Get-Module -Name $moduleName -ListAvailable -Verbose:$false | Where-Object { $_.Version -eq $latestVersion } | Select-Object -First 1
-			}
-			else {
-				New-Log "Could not find module $moduleName in PSGallery to check installation status." -Level WARNING
-			}
-			if ($ForceReinstall -or !$isInstalled) {
-				New-Log "Attempting to install/update module '$moduleName' ($($ForceReinstall ? 'Forced Reinstall' : ($isInstalled ? 'Update' : 'Install')))..."
-				$commonInstallParams = @{
-					Name          = $moduleName
-					Scope         = 'AllUsers'
-					AcceptLicense = $true
-					Confirm       = $false
-					PassThru      = $true
-					ErrorAction   = 'SilentlyContinue' # Changed to SilentlyContinue to allow fallback
-					WarningAction = 'SilentlyContinue'
-				}
-				$res = $null
-				if ($usePSResourceCmdlets) {
-					New-Log "Using Install-PSResource for '$moduleName'."
-					$installParams = @{
-						Reinstall       = $ForceReinstall
-						TrustRepository = $true
-						Repository      = @('PSGallery')
-					} + $commonInstallParams
-					if ($installPrerelease) { $installParams.Add('Prerelease', $true) }
-					$res = Install-PSResource @installParams -Verbose:$false
-				}
-				# Fallback to Install-Module if Install-PSResource failed or wasn't available
-				if (!$res -or !$usePSResourceCmdlets) {
-					if ($usePSResourceCmdlets -and !$res) {
-						New-Log "Install-PSResource failed or returned no result. Trying Install-Module..." -Level WARNING
-					}
-					else {
-						New-Log "Trying with Install-Module for '$moduleName'."
-					}
-					$installParams = @{
-						Force = $ForceReinstall
-					} + $commonInstallParams
-					if ($installPrerelease) { $installParams.Add('AllowPrerelease', $true) }
-					$res = Install-Module @installParams -Verbose:$false
-				}
-				if ($res) {
-					New-Log "Successfully installed/updated module '$moduleName'." -Level SUCCESS
-				}
-				elseif (!$res -and $isInstalled) {
-					New-Log "Could not force an reinstall/update of '$moduleName'. Target version [$($latestVersion)] is already installed."
-				}
-				else {
-					New-Log "Could not install/update '$moduleName'" -Level WARNING
-					$moduleSuccess = $false # Mark failure if install/update didn't succeed
-				}
-			}
-			else {
-				New-Log "Module '$moduleName' version [$latestVersion] is already installed and available."
-			}
-			# Attempt to import the module regardless of install status to ensure it's loaded
-			try {
-				Import-Module -Name $moduleName -Force -ErrorAction Stop -Verbose:$false
-				New-Log "Successfully imported module '$moduleName'." -Level SUCCESS
-			}
-			catch {
-				New-Log "Failed to import module '$moduleName' after check/install attempt." -Level ERROR
-				$moduleSuccess = $false # Mark failure if import fails
-			}
+		finally {
+			if ($powershell) { $powershell.Dispose() }
+			if ($runspace) { $runspace.Close(); $runspace.Dispose() }
 		}
-		return $moduleSuccess
 	}
-	# --- Internal Helper Function: Register-ConfigureRepositoryInternal ---
-	function Register-ConfigureRepositoryInternal {
+	function Set-TlsProtocol {
+		try {
+			$existingProtocols = [Net.ServicePointManager]::SecurityProtocol
+			$tls12Enum = [Net.SecurityProtocolType]::Tls12
+			if (-not ($existingProtocols -band $tls12Enum)) {
+				[Net.ServicePointManager]::SecurityProtocol = $existingProtocols -bor $tls12Enum
+				New-Log "TLS 1.2 security protocol enabled."
+			}
+			else {
+				New-Log "TLS 1.2 already enabled."
+			}
+			return $true
+		}
+		catch {
+			New-Log "Unable to set TLS 1.2: $($_.Exception.Message)" -Level ERROR
+			return $false
+		}
+	}
+	function Install-PSResourceGetForPS5 {
+		[CmdletBinding()]
+		param (
+			[int]$Timeout = 30,
+			[switch]$Force
+		)
+		New-Log "Attempting to install Microsoft.PowerShell.PSResourceGet for PS 5.1$(if ($Force) { ' (Force)' })..."
+		try {
+			$psGalleryScript = { Get-PSRepository -Name 'PSGallery' -ErrorAction SilentlyContinue }
+			$psGallery = Invoke-WithTimeout -ScriptBlock $psGalleryScript -Timeout $Timeout -OperationName "Get-PSRepository PSGallery"
+			if ($null -eq $psGallery) {
+				New-Log "Could not query PSGallery repository - may need manual registration." -Level WARNING
+			}
+			elseif (-not $psGallery.Trusted) {
+				New-Log "Setting PSGallery to Trusted..."
+				$setRepoScript = { Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted -ErrorAction Stop }
+				Invoke-WithTimeout -ScriptBlock $setRepoScript -Timeout $Timeout -OperationName "Set-PSRepository Trusted" | Out-Null
+				New-Log "PSGallery set to Trusted." -Level SUCCESS
+			}
+			else {
+				New-Log "PSGallery is already trusted."
+			}
+		}
+		catch {
+			New-Log "Error configuring PSGallery: $($_.Exception.Message)" -Level WARNING
+		}
+		$forceFlag = $Force.IsPresent
+		$installScript = [scriptblock]::Create(@"
+            `$ErrorActionPreference = 'Stop'
+            Install-Module -Name 'Microsoft.PowerShell.PSResourceGet' -Repository 'PSGallery' -Scope AllUsers -Force:$forceFlag -AllowClobber -AcceptLicense -SkipPublisherCheck -Confirm:`$false
+"@)
+		New-Log "Installing Microsoft.PowerShell.PSResourceGet via Install-Module..."
+		Invoke-WithTimeout -ScriptBlock $installScript -Timeout ($Timeout * 2) -OperationName "Install-Module PSResourceGet" | Out-Null
+		try {
+			Import-Module -Name 'Microsoft.PowerShell.PSResourceGet' -Force -ErrorAction Stop
+			New-Log "Successfully imported Microsoft.PowerShell.PSResourceGet." -Level SUCCESS
+			return $true
+		}
+		catch {
+			New-Log "Failed to import Microsoft.PowerShell.PSResourceGet: $($_.Exception.Message)" -Level ERROR
+			return $false
+		}
+	}
+	function Import-PSResourceGetModule {
+		[CmdletBinding()]
+		param ([switch]$Force)
+		$action = if ($Force) { "Force importing" } else { "Importing" }
+		New-Log "$action Microsoft.PowerShell.PSResourceGet module..."
+		try {
+			Import-Module -Name 'Microsoft.PowerShell.PSResourceGet' -Force:$Force -ErrorAction Stop
+			New-Log "Successfully imported PSResourceGet." -Level SUCCESS
+			return $true
+		}
+		catch {
+			New-Log "Failed to import PSResourceGet: $($_.Exception.Message)" -Level ERROR
+			return $false
+		}
+	}
+	function Register-RepositoryPSResourceGet {
 		[CmdletBinding()]
 		param (
 			[Parameter(Mandatory)][string]$Name,
@@ -240,120 +159,110 @@ function Check-PSResourceRepository {
 			[switch]$IsPSGallery
 		)
 		try {
-			$repository = Get-PSResourceRepository -Name $Name -ErrorAction SilentlyContinue -Verbose:$false
-			# Determine if an update is needed
+			$repository = Get-PSResourceRepository -Name $Name -ErrorAction SilentlyContinue
 			$needsUpdate = ($null -eq $repository) -or ($repository.Priority -ne $Priority) -or (-not $repository.Trusted)
 			if (-not $IsPSGallery -and $Uri -and $repository) {
-				# Also check URI for non-PSGallery repos if they exist
-				$needsUpdate = $needsUpdate -or ($repository.Uri.AbsoluteUri -ne $Uri)
+				$currentUri = if ($repository.Uri) { $repository.Uri.AbsoluteUri } else { $null }
+				$needsUpdate = $needsUpdate -or ($currentUri -ne $Uri)
 			}
 			if ($needsUpdate) {
-				New-Log "Registering/Updating repository '$Name' (Priority: $Priority, Trusted: True)."
-				$commonRegisterParams = @{
-					Name        = $Name
-					Force       = $true # Use Force to overwrite/update existing registration
-					Trusted     = $true
-					Priority    = $Priority
-					Confirm     = $false # Suppress confirmation prompts
-					ErrorAction = 'Stop' # Stop on error for this specific operation
-				}
 				if ($IsPSGallery) {
-					# Special handling for PSGallery - cannot set URI, use Set-PSResourceRepository
-					Set-PSResourceRepository -Name $Name -Priority $Priority -InstallationPolicy Trusted -ErrorAction Stop -Verbose:$false
+					New-Log "Configuring PSGallery (Priority: $Priority, Trusted: True)."
+					Set-PSResourceRepository -Name $Name -Priority $Priority -Trusted -ErrorAction Stop
 				}
 				else {
-					# For other repositories, use Register-PSResourceRepository
-					$registerParams = @{} + $commonRegisterParams
-					$registerParams.Uri = $Uri
+					New-Log "Registering repository '$Name' (Uri: $Uri, Priority: $Priority)."
+					$registerParams = @{
+						Name        = $Name
+						Uri         = $Uri
+						Priority    = $Priority
+						Trusted     = $true
+						Force       = $true
+						PassThru    = $false
+						ErrorAction = 'Stop'
+					}
 					if ($ApiVersion -eq 'v2') {
-						$registerParams.Add('ApiVersion', $ApiVersion)
+						$registerParams.ApiVersion = 'v2'
 						New-Log "Using API Version V2 for '$Name'."
 					}
-					Register-PSResourceRepository @registerParams -Verbose:$false
+					Register-PSResourceRepository @registerParams
 				}
-				New-Log "Successfully registered/updated '$Name' repository resource." -Level SUCCESS
+				New-Log "Successfully configured '$Name' repository." -Level SUCCESS
 			}
 			else {
-				New-Log "'$Name' repository is already registered and configured correctly."
+				New-Log "'$Name' repository already configured correctly."
 			}
-			return $true # Indicate success for this repository
+			return $true
 		}
 		catch {
-			New-Log "Failed to register/configure '$Name' repository." -Level ERROR
-			return $false # Indicate failure for this repository
+			New-Log "Failed to configure '$Name': $($_.Exception.Message)" -Level ERROR
+			return $false
 		}
 	}
-	# --- Main Function Logic ---
-	# Check for Admin privileges
 	if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-		New-Log "Administrator privileges are required to manage repositories and install modules with -Scope AllUsers. Aborting." -Level WARNING
-		return # Exit if not admin
+		New-Log "Administrator privileges required. Aborting." -Level WARNING
+		return $false
 	}
-	$overallSuccess = $true # Track overall success
-	# Ensure TLS 1.2 is enabled
-	try {
-		$existingProtocols = [Net.ServicePointManager]::SecurityProtocol
-		$tls12Enum = [Net.SecurityProtocolType]::Tls12
-		if (-not ($existingProtocols -band $tls12Enum)) {
-			[Net.ServicePointManager]::SecurityProtocol = $existingProtocols -bor $tls12Enum
-			New-Log "TLS 1.2 security protocol enabled for this session."
+	Set-TlsProtocol | Out-Null
+	$needsDependencyWork = (-not $hasPSResourceGet) -or $ImportDependencies.IsPresent
+	if ($needsDependencyWork) {
+		if ($ImportDependencies.IsPresent -and $hasPSResourceGet) {
+			New-Log "-ImportDependencies specified. Re-importing PSResourceGet module..."
 		}
-		else {
-			New-Log "TLS 1.2 security protocol was already enabled."
-		}
-	}
-	catch {
-		New-Log "Unable to set TLS 1.2 security protocol. Network operations might fail." -Level ERROR
-	}
-	# Check if PSResourceGet cmdlets are available, install if needed or forced
-	$psResourceCmdletAvailable = Get-Command Register-PSResourceRepository -ErrorAction SilentlyContinue -Verbose:$false
-	if (!$psResourceCmdletAvailable -or $ImportDependencies.IsPresent) {
-		if (!$psResourceCmdletAvailable) {
-			New-Log "Required command 'Register-PSResourceRepository' not found. Attempting to install dependencies..." -Level WARNING
-		}
-		else {
-			New-Log "Parameter -ImportDependencies specified. Checking/installing dependencies..."
-		}
-		# Call internal function to install/update modules
-		if (-not (Install-RequiredModulesInternal -ForceReinstall:$ForceInstall.IsPresent)) {
-			New-Log "Failed to install or import required modules (PowerShellGet/Microsoft.PowerShell.PSResourceGet). Repository configuration might fail." -Level WARNING
-			# Check again if the command is available *after* the attempt
-			if (-not (Get-Command Register-PSResourceRepository -ErrorAction SilentlyContinue -Verbose:$false)) {
-				New-Log "Required command 'Register-PSResourceRepository' is STILL not available after installation attempt. Aborting repository configuration." -Level ERROR
-				return # Abort if essential command is still missing
+		if ($isPSCore) {
+			if (-not (Import-PSResourceGetModule -Force:$ImportDependencies.IsPresent)) {
+				New-Log "Could not import PSResourceGet in PS7." -Level ERROR
+				return $false
 			}
 		}
-		# Verify command availability again after potential install/import
-		if (-not (Get-Command Register-PSResourceRepository -ErrorAction SilentlyContinue -Verbose:$false)) {
-			New-Log "Required command 'Register-PSResourceRepository' is still not available after installation attempt. Aborting repository configuration." -Level ERROR
-			return # Abort if still missing
-		}
 		else {
-			New-Log "Required module commands are now available." -Level SUCCESS
+			$existingModule = Get-Module -Name 'Microsoft.PowerShell.PSResourceGet' -ListAvailable -ErrorAction SilentlyContinue
+			if ($ForceInstall.IsPresent -or -not $existingModule) {
+				if ($ForceInstall.IsPresent -and $existingModule) {
+					New-Log "-ForceInstall specified. Reinstalling PSResourceGet..."
+				}
+				if (-not (Install-PSResourceGetForPS5 -Timeout $TimeoutSeconds -Force:$ForceInstall.IsPresent)) {
+					New-Log "Could not install PSResourceGet. Cannot continue." -Level ERROR
+					return $false
+				}
+			}
+			else {
+				if (-not (Import-PSResourceGetModule -Force:$ImportDependencies.IsPresent)) {
+					New-Log "Could not import existing PSResourceGet module." -Level ERROR
+					return $false
+				}
+			}
 		}
+		$hasPSResourceGet = [bool](Get-Command -Name 'Get-PSResourceRepository' -ErrorAction SilentlyContinue)
 	}
-	else {
-		New-Log "Required module commands (PSResourceGet) are already available."
+	if (-not $hasPSResourceGet) {
+		New-Log "PSResourceGet cmdlets still not available. Aborting." -Level ERROR
+		return $false
 	}
-	# Define repositories to configure
+	New-Log "PSResourceGet cmdlets are available. Configuring repositories..."
 	$repositories = @(
-		@{ Name = 'PSGallery'; Uri = 'https://www.powershellgallery.com/api/v2'; Priority = 30; IsPSGallery = $true } # PSGallery uses Set-PSResourceRepository
+		@{ Name = 'PSGallery'; Uri = $null; Priority = 30; IsPSGallery = $true }
 		@{ Name = 'NuGetGallery'; Uri = 'https://api.nuget.org/v3/index.json'; Priority = 40 }
-		@{ Name = 'NuGet'; Uri = 'http://www.nuget.org/api/v2'; Priority = 50; ApiVersion = 'v2' } # Explicitly V2 API
+		@{ Name = 'NuGet'; Uri = 'https://www.nuget.org/api/v2'; Priority = 50; ApiVersion = 'v2' }
 	)
-	New-Log "Starting repository configuration..."
-	# Configure each repository
+	$overallSuccess = $true
 	foreach ($repo in $repositories) {
-		if (-not (Register-ConfigureRepositoryInternal @repo -Verbose:$false)) {
-			$overallSuccess = $false # Update overall status if any repo fails
+		$splatParams = @{
+			Name        = $repo.Name
+			Priority    = $repo.Priority
+			IsPSGallery = [bool]$repo.IsPSGallery
+		}
+		if ($repo.Uri) { $splatParams.Uri = $repo.Uri }
+		if ($repo.ApiVersion) { $splatParams.ApiVersion = $repo.ApiVersion }
+		if (-not (Register-RepositoryPSResourceGet @splatParams)) {
+			$overallSuccess = $false
 		}
 	}
-	# Final status message
 	if ($overallSuccess) {
-		New-Log "All specified repositories appear to be registered and configured." -Level SUCCESS
+		New-Log "All repositories configured successfully." -Level SUCCESS
 	}
 	else {
-		New-Log "One or more repositories could not be configured correctly. Please check previous error messages." -Level WARNING
+		New-Log "Some repositories could not be configured." -Level WARNING
 	}
 }
 #endregion Check-PSResourceRepository
@@ -449,18 +358,10 @@ function Get-ModuleInfo {
 	$allPotentialFiles = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
 	foreach ($dir in $paths) {
 		try {
-			$psd1Files = Get-ChildItem -Path $dir -Recurse -Filter "*.psd1" -File -ErrorAction SilentlyContinue
-			$xmlFiles = Get-ChildItem -Path $dir -Recurse -Filter "PSGetModuleInfo.xml" -File -ErrorAction SilentlyContinue
-			if ($psd1Files -is [array]) {
-				foreach ($file in $psd1Files) {
-					$allPotentialFiles.Add($file)
-				}
-			}
-			if ($xmlFiles -is [array]) {
-				foreach ($file in $xmlFiles) {
-					$allPotentialFiles.Add($file)
-				}
-			}
+			$psd1Files = @(Get-ChildItem -Path $dir -Recurse -Filter "*.psd1" -ErrorAction SilentlyContinue)
+			$xmlFiles = @(Get-ChildItem -Path $dir -Recurse -Filter "PSGetModuleInfo.xml" -ErrorAction SilentlyContinue)
+			foreach ($file in $psd1Files) { $allPotentialFiles.Add($file) }
+			foreach ($file in $xmlFiles) { $allPotentialFiles.Add($file) }
 		}
 		catch {
 			Write-Host "Error processing directory $($dir.FullName): $_" -ForegroundColor Red
@@ -984,13 +885,13 @@ function Get-ModuleUpdateStatus {
 						ErrorFetching = "Pre-fetch job timed out after ${TimeoutSeconds}s"; Skipped = $false
 					}
 				}
-				$timeoutJob | Stop-Job -Force -ErrorAction SilentlyContinue
+				$timeoutJob | Stop-Job -ErrorAction SilentlyContinue
 			}
 		}
 		# Check for aggressive termination criteria
 		$elapsedSeconds = ((Get-Date) - $waitStart).TotalSeconds
 		$percentCompleted = $completedCount / $totalJobs
-		if ($elapsedSeconds -gt 8 -and $percentCompleted -gt 0.90 -and $runningCount -gt 0 -and $runningCount -lt 10) {
+		if ($elapsedSeconds -gt 30 -and $percentCompleted -gt 0.90 -and $runningCount -gt 0 -and $runningCount -lt 10) {
 			New-Log "Aggressively terminating remaining $runningCount jobs after $([int]$elapsedSeconds)s as they're taking too long" -Level WARNING
 			foreach ($slowJob in $runningJobs) {
 				$jobModuleName = $slowJob.PSObject.Properties["ModuleNameForJob"].Value
@@ -1012,7 +913,7 @@ function Get-ModuleUpdateStatus {
 						ErrorFetching = "Job terminated for taking too long"; Skipped = $false
 					}
 				}
-				$slowJob | Stop-Job -Force -ErrorAction SilentlyContinue
+				$slowJob | Stop-Job -ErrorAction SilentlyContinue
 			}
 		}
 		# EXIT CONDITIONS - in order of importance
@@ -1026,11 +927,11 @@ function Get-ModuleUpdateStatus {
 			break
 		}
 		# 2. Hard timeout - if we've waited too long, just exit regardless
-		if ($elapsedSeconds -gt 30) {
-			New-Log "Hard timeout after 30 seconds - exiting job monitoring loop" -Level WARNING
+		if ($elapsedSeconds -gt 45) {
+			New-Log "Hard timeout after 45 seconds - exiting job monitoring loop" -Level WARNING
 			# Stop any remaining running jobs
 			foreach ($job in $runningJobs) {
-				$job | Stop-Job -Force -ErrorAction SilentlyContinue
+				$job | Stop-Job -ErrorAction SilentlyContinue
 			}
 			break
 		}
@@ -1185,7 +1086,7 @@ function Get-ModuleUpdateStatus {
 				$authorsMatch = $false
 				$normalizedLocalAuthor = [Regex]::Replace($localAuthor, '[^a-zA-Z0-9]', '')
 				$normalizedGalleryAuthor = [Regex]::Replace($galleryAuthor, '[^a-zA-Z0-9]', '')
-				if ($normalizedLocalAuthor -and $normalizedGalleryAuthor -and $normalizedGalleryAuthor -match $normalizedLocalAuthor) {
+				if ($normalizedLocalAuthor -and $normalizedGalleryAuthor -and $normalizedGalleryAuthor -eq $normalizedLocalAuthor) {
 					# Simple equality for now
 					New-Log "[$moduleName] Author Match: OK (Local: '$localAuthor', Online: '$galleryAuthor')." -Level VERBOSE
 					$authorsMatch = $true
@@ -1291,18 +1192,24 @@ function Update-Modules {
 	.SYNOPSIS
 	Installs the latest versions of modules identified as outdated, optionally cleaning up old versions.
 	.DESCRIPTION
-	This function takes an array of module update objects (typically the output from `Get-ModuleUpdateStatus`) and attempts to install the specified newer version for each module.
-	It iterates through the provided module objects. For each module:
-	1.  It determines the exact target version string to install (e.g., "2.1.0" or "2.1.0-preview3") using the `LatestVersionString` property from the input object (or constructing it from `LatestVersion` and `PreReleaseVersion` if `LatestVersionString` is not directly available). It also parses this version using `Parse-ModuleVersion` to get structured version info.
-	2.  It identifies the source repository and the unique base paths where outdated versions of this module currently exist (from the `OutdatedModules.Path` property of the input object).
-	3.  It calls the internal helper function `Install-PSModule`.
-	`Install-PSModule` is responsible for the actual installation. It receives the module name, base version string (e.g., "2.1.0"), the full pre-release version string if applicable (e.g., "2.1.0-preview3"), repository, pre-release status, and the list of destination base paths.
-	`Install-PSModule` prioritizes using `Save-PSResource` to place the module into the parent directory of these destination base paths (e.g., if an old version is in 'C:\Modules\MyModule\1.0', it tries to save to 'C:\Modules'). This allows more precise control over the installation location.
-	If `Save-PSResource` fails or isn't suitable for all paths, `Install-PSModule` falls back to using `Install-PSResource -Scope AllUsers` and then `Install-Module -Scope AllUsers` as secondary attempts. These fallbacks have less control over the exact installation location if multiple PSModulePaths exist and might install to a default system path.
-	4.  If the `-Clean` switch is specified AND the update installation is reported as successful for a module (meaning the new version was installed or confirmed in at least one of the targeted base paths), the function then calls another internal helper `Remove-OutdatedVersions`.
-	`Remove-OutdatedVersions` attempts to remove the older version directories of the updated module from the paths where the update was successfully installed.
-	It uses `Uninstall-PSResource` for each old version directory and may fall back to `Remove-Item -Recurse -Force`.
-	*   Certain critical modules (e.g., 'PowerShellGet', 'Microsoft.PowerShell.PSResourceGet') are excluded from cleaning by default.
+	This function takes an array of module update objects (typically the output from `Get-ModuleUpdateStatus`) and attempts to install the specified newer version for each module using a 3-phase parallel pipeline.
+
+	Phase 1 - Pre-processing (sequential, main thread):
+	For each module, the function:
+	1.  Determines the exact target version string to install (e.g., "2.1.0" or "2.1.0-preview3") using the `LatestVersionString` property from the input object (or constructing it from `LatestVersion` and `PreReleaseVersion` if `LatestVersionString` is not directly available). It parses this version using `Parse-ModuleVersion` to get structured version info.
+	2.  Identifies the source repository and the unique base paths where outdated versions of this module currently exist (from the `OutdatedModules.Path` property of the input object).
+	3.  Evaluates `ShouldProcess` prompts on the main thread (required since `ShouldProcess` does not work in parallel runspaces). Approved modules are collected with all pre-computed data for Phase 2.
+
+	Phase 2 - Parallel installation (ForEach-Object -Parallel):
+	All approved modules are installed concurrently using `ForEach-Object -Parallel` with a throttle limit of `Min(moduleCount, Max(4, ProcessorCount * 2))`. Each parallel runspace:
+	1.  Restores helper function definitions (`New-Log`, `Install-PSModule`) and imports `Microsoft.PowerShell.PSResourceGet`.
+	2.  Calls `Install-PSModule` which prioritizes `Save-PSResource` to place the module into the parent directory of the destination base paths. If that fails, it falls back to `Install-PSResource -Scope AllUsers` and then `Install-Module -Scope AllUsers`.
+	3.  Reports progress with ETA calculation via a synchronized hashtable and `ConcurrentBag` for thread-safe result collection.
+
+	Phase 3 - Post-processing and cleaning (sequential, main thread):
+	If the `-Clean` switch is specified AND an update was successful, the function calls `Remove-OutdatedVersions` sequentially (to avoid filesystem conflicts between parallel operations).
+	`Remove-OutdatedVersions` uses `Uninstall-PSResource` for each old version directory and may fall back to `Remove-Item -Recurse -Force`.
+	Certain critical modules (e.g., 'PowerShellGet', 'Microsoft.PowerShell.PSResourceGet') are excluded from cleaning by default.
 	The function reports the success or failure for each module update attempt, including which base paths were successfully updated, which failed, and (if -Clean was used) which old version paths were removed. A progress bar can optionally be displayed using `-UseProgressBar`.
 	.PARAMETER OutdatedModules
 	[Mandatory, ValueFromPipeline] An array of PSCustomObjects detailing the modules to update. Each object must contain at least the following properties (this format matches the output of `Get-ModuleUpdateStatus`):
@@ -1387,10 +1294,14 @@ function Update-Modules {
 			return
 		}
 		$total = $batchModules.Count
+		# --- PHASE 1: Pre-process all modules on the main thread ---
+		# Version parsing, path validation, and ShouldProcess must run sequentially on the main thread.
+		# ShouldProcess does not work inside ForEach-Object -Parallel runspaces.
+		New-Log "Phase 1: Pre-processing $total module(s) (version parsing, path validation, ShouldProcess)..."
+		$modulesToInstall = [System.Collections.Generic.List[object]]::new() # Modules approved for parallel install
 		$current = 0
 		foreach ($module in $batchModules) {
 			$moduleName = $module.ModuleName
-			New-Log "[$moduleName] Starting update process for $($total-$current) modules."
 			$current++
 			[string]$targetVersionString = $($module.LatestVersion)
 			[version]$latestVer = $null # This will hold the base [version] object
@@ -1448,72 +1359,28 @@ function Update-Modules {
 					})
 				continue
 			}
-			# --- Progress Bar Update ---
-			if ($UseProgressBar.IsPresent) {
-				$progressParams = @{
-					Activity         = "Updating PowerShell Modules"
-					Status           = if ($module.IsPreview) { "[$moduleName][$current/$total] Updating to $preReleaseVersion" } else { "[$moduleName][$current/$total] Updating to $targetVersionString" }
-					PercentComplete  = (($current / $total) * 100)
-					CurrentOperation = "Preparing install for $moduleName"
-				}
-				Write-Progress @progressParams
-			}
 			New-Log "[$moduleName] Target base paths based on outdated locations: $($outdatedPaths -join '; ')" -Level VERBOSE
-			# --- Call Installation Helper ---
-			# ShouldProcess target should be the module name and version
-			if ($PSCmdlet.ShouldProcess("$moduleName v$targetVersionString", "Install from repository '$repository' to paths derived from: $($outdatedPaths -join ', ')") -or $PSCmdlet.ShouldProcess("$moduleName v$preReleaseVersion", "Install from repository '$repository' to paths derived from: $($outdatedPaths -join ', ')")) {
-				if ($UseProgressBar.IsPresent) {
-					$progressParams.CurrentOperation = "[$moduleName] Calling internal Install-PSModule.."
-					Write-Progress @progressParams
-				}
-				$installResult = Install-PSModule -ModuleName $moduleName -TargetVersionString $targetVersionString -PreReleaseVersion $preReleaseVersion -RepositoryName $repository -IsPreview $installAsPreview -Destinations $outdatedPaths -ErrorAction SilentlyContinue
-				# --- Process Installation Result ---
-				$finalResult = [PSCustomObject]@{
-					ModuleName           = $moduleName
-					NewVersionPreRelease = if ($module.IsPreview) { $preReleaseVersion }
-					NewVersion           = $baseVerStr
-					UpdatedPaths         = @($installResult.UpdatedPaths)
-					FailedPaths          = if ($installResult.FailedPaths) { @($installResult.FailedPaths) } else { $null }
-					OverallSuccess       = ($installResult.FailedPaths.Count -eq 0 -and $installResult.UpdatedPaths.Count -gt 0) # Success if no failures AND at least one success
-					CleanedPaths         = if ($Clean.IsPresent) { @() } else { $null } # Initialize only if -Clean is used, otherwise null
-				}
-				# Ensure FailedPaths is always an array for consistent checking later
-				if ($null -eq $finalResult.FailedPaths) { $finalResult.FailedPaths = @() }
-				# --- Optional Cleaning Step ---
-				if ($finalResult.OverallSuccess -and $Clean.IsPresent) {
-					if ($UseProgressBar.IsPresent) {
-						$progressParams.CurrentOperation = "[$moduleName] Cleaning old versions.."
-						Write-Progress @progressParams
-					}
-					New-Log "[$moduleName] Update successful to paths: $($finalResult.UpdatedPaths -join '; '). Proceeding with cleaning old versions..."
-					# Call cleaning helper for the paths that were successfully updated
-					# ShouldProcess target should be the module name and the versions to be removed
-					if ($PSCmdlet.ShouldProcess("$moduleName (Versions: $($outdatedVersions -join ', '))", "Remove from paths: $($finalResult.UpdatedPaths -join ', ')")) {
-						# Pass the successfully parsed [version] object and pre-release tag of the NEW version to avoid removing it
-						$cleanedPathsResult = Remove-OutdatedVersions -ModuleName $moduleName -ModuleBasePaths $finalResult.UpdatedPaths -LatestVersion $latestVer -PreReleaseVersion $preReleaseVersion -ErrorAction SilentlyContinue
-						# Ensure we only process string paths
-						$cleanedPathsResult = $cleanedPathsResult | Where-Object { $_ -is [string] }
-						if ($cleanedPathsResult -and $cleanedPathsResult.Count -gt 0) {
-							$finalResult.CleanedPaths = $cleanedPathsResult
-							New-Log "[$moduleName] Successfully cleaned $($cleanedPathsResult.Count) old items: $($cleanedPathsResult -join '; ')" -Level SUCCESS
+			# --- ShouldProcess check on the main thread (not supported in parallel runspaces) ---
+			$displayVersion = if ($installAsPreview -and $preReleaseVersion) { $preReleaseVersion } else { $targetVersionString }
+			if ($PSCmdlet.ShouldProcess("$moduleName v$displayVersion", "Install from repository '$repository' to paths: $($outdatedPaths -join ', ')")) {
+				# Approved for installation - add to the parallel batch with all pre-computed data
+				$modulesToInstall.Add([PSCustomObject]@{
+						ModuleName          = $moduleName
+						TargetVersionString = $targetVersionString
+						PreReleaseVersion   = $preReleaseVersion
+						BaseVerStr          = $baseVerStr
+						Repository          = $repository
+						InstallAsPreview    = $installAsPreview
+						OutdatedPaths       = $outdatedPaths
+						OutdatedVersions    = $outdatedVersions
+						LatestVer           = $latestVer
+						IsPreview           = [bool]$module.IsPreview
+						# Pre-evaluate ShouldProcess for cleaning on main thread
+						CleanApproved       = if ($Clean.IsPresent) {
+							$PSCmdlet.ShouldProcess("$moduleName (Versions: $($outdatedVersions -join ', '))", "Remove from paths: $($outdatedPaths -join ', ')")
 						}
-						else {
-							New-Log "[$moduleName] Cleaning step completed. No old versions were removed in the updated paths. This may be expected or could indicate issues (e.g., permissions, module not found by Uninstall-PSResource). Check paths: $($finalResult.UpdatedPaths -join '; ')" -Level VERBOSE
-						}
-					}
-					else {
-						New-Log "[$moduleName] Skipped cleaning due to ShouldProcess user choice." -Level WARNING
-					}
-				}
-				elseif ($Clean.IsPresent -and -not $finalResult.OverallSuccess) {
-					New-Log "[$moduleName] Skipping cleaning as the update was not fully successful (Failed Paths: $($finalResult.FailedPaths -join '; '))." -Level VERBOSE
-				}
-				# Set CleanedPaths to explicit message if Clean was used but skipped/failed
-				elseif ($Clean.IsPresent -and $finalResult.OverallSuccess -and ($null -eq $finalResult.CleanedPaths -or $finalResult.CleanedPaths.Count -eq 0)) {
-					$finalResult.CleanedPaths = "Cleaning attempted but no paths removed."
-				}
-				# Add the final result for this module to the aggregate list
-				$aggregateResults.Add($finalResult)
+						else { $false }
+					})
 			}
 			else {
 				New-Log "[$moduleName][$current/$total] Skipped update due to ShouldProcess user choice." -Level WARNING
@@ -1527,6 +1394,154 @@ function Update-Modules {
 						CleanedPaths         = if ($Clean.IsPresent) { "Skipped by ShouldProcess" } else { $null }
 					})
 			}
+		}
+		if ($modulesToInstall.Count -eq 0) {
+			New-Log "No modules approved for installation after pre-processing. Exiting."
+			return $aggregateResults
+		}
+		# --- PHASE 2: Parallel module installation ---
+		# Uses ForEach-Object -Parallel following the same pattern as Get-ModuleUpdateStatus comparison stage.
+		# Helper function definitions are passed via $using: and restored in each parallel runspace.
+		$installThrottleLimit = [Math]::Min($modulesToInstall.Count, [Math]::Max(4, [System.Environment]::ProcessorCount * 2))
+		New-Log "Phase 2: Starting parallel installation of $($modulesToInstall.Count) module(s) (Throttle: $installThrottleLimit)..." -Level SUCCESS
+		$parallelInstallResults = [System.Collections.Concurrent.ConcurrentBag[object]]::new()
+		$installSync = [System.Collections.Hashtable]::Synchronized(@{
+				processed = 0; successes = 0; failures = 0
+				total = $modulesToInstall.Count; startTime = Get-Date
+			})
+		# Capture helper function definitions for the parallel runspaces
+		$NewLogDef = ${function:New-Log}.ToString()
+		$InstallPSModuleDef = ${function:Install-PSModule}.ToString()
+		$modulesToInstall | ForEach-Object -ThrottleLimit $installThrottleLimit -Parallel {
+			$script:ErrorActionPreference = 'Continue'
+			$preparedModule = $_
+			$moduleName = $preparedModule.ModuleName
+			$VerbosePreference = $using:VerbosePreference
+			$installSync = $using:installSync
+			$parallelInstallResults = $using:parallelInstallResults
+			# Restore helper functions into this parallel runspace
+			${function:New-Log} = $using:NewLogDef
+			${function:Install-PSModule} = $using:InstallPSModuleDef
+			Import-Module -Name 'Microsoft.PowerShell.PSResourceGet' -Global -Force
+			try {
+				New-Log "[$moduleName] Installing version [$($preparedModule.TargetVersionString)]..." -Level VERBOSE
+				$installResult = Install-PSModule -ModuleName $moduleName -TargetVersionString $preparedModule.TargetVersionString -PreReleaseVersion $preparedModule.PreReleaseVersion -RepositoryName $preparedModule.Repository -IsPreview $preparedModule.InstallAsPreview -Destinations $preparedModule.OutdatedPaths -ErrorAction SilentlyContinue
+				$finalResult = [PSCustomObject]@{
+					ModuleName           = $moduleName
+					NewVersionPreRelease = if ($preparedModule.IsPreview) { $preparedModule.PreReleaseVersion }
+					NewVersion           = $preparedModule.BaseVerStr
+					UpdatedPaths         = @($installResult.UpdatedPaths)
+					FailedPaths          = if ($installResult.FailedPaths) { @($installResult.FailedPaths) } else { @() }
+					OverallSuccess       = ($installResult.FailedPaths.Count -eq 0 -and $installResult.UpdatedPaths.Count -gt 0)
+					CleanedPaths         = $null # Placeholder - cleaning is handled in Phase 3
+					# Carry forward pre-computed data needed for Phase 3 (cleaning)
+					_OutdatedVersions    = $preparedModule.OutdatedVersions
+					_LatestVer           = $preparedModule.LatestVer
+					_PreReleaseVersion   = $preparedModule.PreReleaseVersion
+					_CleanApproved       = $preparedModule.CleanApproved
+				}
+				$parallelInstallResults.Add($finalResult)
+				if ($finalResult.OverallSuccess) {
+					$installSync.successes++
+					New-Log "[$moduleName] Parallel install completed successfully." -Level SUCCESS
+				}
+				else {
+					$installSync.failures++
+					New-Log "[$moduleName] Parallel install completed with failures: $($finalResult.FailedPaths -join '; ')" -Level WARNING
+				}
+			}
+			catch {
+				New-Log "[$moduleName] Unhandled error during parallel install: $($_.Exception.Message)" -Level ERROR
+				$parallelInstallResults.Add([PSCustomObject]@{
+						ModuleName           = $moduleName
+						NewVersionPreRelease = if ($preparedModule.IsPreview) { $preparedModule.PreReleaseVersion }
+						NewVersion           = $preparedModule.BaseVerStr
+						UpdatedPaths         = @()
+						FailedPaths          = @("Parallel install error: $($_.Exception.Message)")
+						OverallSuccess       = $false
+						CleanedPaths         = $null
+						_OutdatedVersions    = $preparedModule.OutdatedVersions
+						_LatestVer           = $preparedModule.LatestVer
+						_PreReleaseVersion   = $preparedModule.PreReleaseVersion
+						_CleanApproved       = $false
+					})
+				$installSync.failures++
+			}
+			finally {
+				$installSync.processed++
+				$percentComplete = [math]::Min(100, ($installSync.processed / $installSync.total) * 100)
+				[int]$progressInterval = [math]::Max(1, [math]::Ceiling($installSync.total / 10))
+				if (($installSync.processed % $progressInterval -eq 0) -or $installSync.processed -eq $installSync.total) {
+					$elapsed = (Get-Date) - $installSync.startTime
+					$avgTimePerModule = if ($installSync.processed -gt 0) { $elapsed.TotalSeconds / $installSync.processed } else { 0 }
+					$remainingModules = $installSync.total - $installSync.processed
+					$etaSeconds = $avgTimePerModule * $remainingModules
+					$etaString = if ($etaSeconds -gt 0) {
+						$eta = [timespan]::FromSeconds($etaSeconds)
+						"$($eta.Minutes.ToString('00')):$($eta.Seconds.ToString('00'))"
+					}
+					else {
+						"00:00"
+					}
+					$progressMsg = "Install progress: $([math]::Round($percentComplete, 0))% ($($installSync.processed)/$($installSync.total)) | OK: $($installSync.successes), Fail: $($installSync.failures) | Elapsed: {0:mm\:ss} | ETA: $etaString" -f $elapsed
+					New-Log $progressMsg
+				}
+			}
+		}
+		$parallelDuration = (Get-Date) - $installSync.startTime
+		New-Log "Phase 2 complete. Parallel installation took $($parallelDuration.ToString("g")). Successes: $($installSync.successes), Failures: $($installSync.failures)."
+		# --- PHASE 3: Post-processing - Cleaning and result assembly (sequential on main thread) ---
+		# Cleaning runs sequentially to avoid filesystem conflicts (Uninstall-PSResource, Remove-Item).
+		$installResultsArray = @($parallelInstallResults)
+		$useClean = $Clean.IsPresent
+		foreach ($finalResult in $installResultsArray) {
+			$moduleName = $finalResult.ModuleName
+			if ($useClean) {
+				$finalResult.CleanedPaths = @() # Initialize for -Clean mode
+			}
+			# --- Progress Bar Update (sequential, on main thread) ---
+			if ($UseProgressBar.IsPresent) {
+				$progressParams = @{
+					Activity         = "Updating PowerShell Modules"
+					Status           = "Post-processing: $moduleName"
+					PercentComplete  = 100
+					CurrentOperation = if ($useClean -and $finalResult.OverallSuccess) { "[$moduleName] Cleaning old versions.." } else { "[$moduleName] Finalizing.." }
+				}
+				Write-Progress @progressParams
+			}
+			# --- Optional Cleaning Step ---
+			if ($finalResult.OverallSuccess -and $useClean) {
+				New-Log "[$moduleName] Update successful to paths: $($finalResult.UpdatedPaths -join '; '). Proceeding with cleaning old versions..."
+				if ($finalResult._CleanApproved) {
+					# Pass the successfully parsed [version] object and pre-release tag of the NEW version to avoid removing it
+					$cleanedPathsResult = Remove-OutdatedVersions -ModuleName $moduleName -ModuleBasePaths $finalResult.UpdatedPaths -LatestVersion $finalResult._LatestVer -PreReleaseVersion $finalResult._PreReleaseVersion -ErrorAction SilentlyContinue
+					# Ensure we only process string paths
+					$cleanedPathsResult = $cleanedPathsResult | Where-Object { $_ -is [string] }
+					if ($cleanedPathsResult -and $cleanedPathsResult.Count -gt 0) {
+						$finalResult.CleanedPaths = $cleanedPathsResult
+						New-Log "[$moduleName] Successfully cleaned $($cleanedPathsResult.Count) old items: $($cleanedPathsResult -join '; ')" -Level SUCCESS
+					}
+					else {
+						New-Log "[$moduleName] Cleaning step completed. No old versions were removed in the updated paths. This may be expected or could indicate issues (e.g., permissions, module not found by Uninstall-PSResource). Check paths: $($finalResult.UpdatedPaths -join '; ')" -Level VERBOSE
+					}
+				}
+				else {
+					New-Log "[$moduleName] Skipped cleaning due to ShouldProcess user choice." -Level WARNING
+				}
+			}
+			elseif ($useClean -and -not $finalResult.OverallSuccess) {
+				New-Log "[$moduleName] Skipping cleaning as the update was not fully successful (Failed Paths: $($finalResult.FailedPaths -join '; '))." -Level VERBOSE
+			}
+			# Set CleanedPaths to explicit message if Clean was used but skipped/failed
+			if ($useClean -and $finalResult.OverallSuccess -and ($null -eq $finalResult.CleanedPaths -or $finalResult.CleanedPaths.Count -eq 0)) {
+				$finalResult.CleanedPaths = "Cleaning attempted but no paths removed."
+			}
+			# Remove internal tracking properties before adding to final results
+			$finalResult.PSObject.Properties.Remove('_OutdatedVersions')
+			$finalResult.PSObject.Properties.Remove('_LatestVer')
+			$finalResult.PSObject.Properties.Remove('_PreReleaseVersion')
+			$finalResult.PSObject.Properties.Remove('_CleanApproved')
+			$aggregateResults.Add($finalResult)
 		}
 		$successCount = ($aggregateResults | Where-Object { $_.OverallSuccess }).Count
 		$failCount = $total - $successCount
@@ -1625,13 +1640,14 @@ function Install-PSModule {
 		IncludeXml          = $true
 		SkipDependencyCheck = $true
 		AcceptLicense       = $true
-		PreRelease          = if ($IsPreview) { $true } else { $false }
 		Confirm             = $false
 		PassThru            = $true
 		Verbose             = $false
 		ErrorAction         = 'Stop'
 		WarningAction       = 'SilentlyContinue'
 	}
+	# Only add -PreRelease switch when true — passing $false can cause issues with some PSResourceGet versions
+	if ($IsPreview) { $commonSaveParams['PreRelease'] = $true }
 	$pathsToRetry = [System.Collections.Generic.List[string]]::new()
 	foreach ($destinationBasePath in $Destinations) {
 		# Save-PSResource needs the PARENT of the destination base path
@@ -1648,11 +1664,14 @@ function Install-PSModule {
 			$saveRes = Save-PSResource @commonSaveParams -Path $saveTargetDir # Use Stop to catch errors
 		}
 		catch {
-			New-Log "[$moduleName] Save-PSResource explicitly failed for v$TargetVersionString to '$saveTargetDir'" -Level WARNING
+			New-Log "[$moduleName] Save-PSResource failed for v$TargetVersionString to '$saveTargetDir': $($_.Exception.Message)" -Level WARNING
 			$saveRes = $null # Ensure it's null on error
 		}
 		$savedItem = $saveRes | Select-Object -Last 1 # Get the actual saved item if multiple dependencies were saved
-		if ($savedItem -and $($savedItem.Version) -eq $TargetVersionStringOrig -and $($savedItem.Prerelease) -eq $(($PreReleaseVersion -split '-')[-1]) ) {
+		# Normalize Prerelease comparison: treat $null and '' as equivalent
+		$expectedPrerelease = if ($PreReleaseVersion) { ($PreReleaseVersion -split '-')[-1] } else { '' }
+		$actualPrerelease = if ($savedItem -and $savedItem.Prerelease) { $savedItem.Prerelease } else { '' }
+		if ($savedItem -and "$($savedItem.Version)" -eq "$TargetVersionStringOrig" -and $actualPrerelease -eq $expectedPrerelease) {
 			# Construct the expected final module path after save
 			$expectedModuleVersionPath = Join-Path -Path $saveTargetDir -ChildPath "$ModuleName\$TargetVersionStringOrig"
 			New-Log "[$moduleName] Successfully saved version [$TargetVersionString] via Save-PSResource. Expected path: '$expectedModuleVersionPath'" -Level SUCCESS
@@ -1680,24 +1699,28 @@ function Install-PSModule {
 				Reinstall           = $true
 				TrustRepository     = $true
 				Repository          = $RepositoryName
-				PreRelease          = if ($IsPreview) { $true } else { $false }
 				PassThru            = $true
 				Verbose             = $false
 				ErrorAction         = 'Stop'
 				WarningAction       = 'SilentlyContinue'
 			}
+			# Only add -PreRelease switch when true
+			if ($IsPreview) { $psResourceParams['PreRelease'] = $true }
 			New-Log "[$moduleName] Attempting Install-PSResource for version [$($psResourceParams.Version)]..." -Level VERBOSE
 			$installRes1 = $null # Renamed variable
 			$installRes1 = Install-PSResource @psResourceParams
 			$installedItem1 = $installRes1 | Select-Object -Last 1
-			if ($installedItem1 -and $($installedItem1.Version) -eq $TargetVersionStringOrig -and $($installedItem1.Prerelease) -eq $(($PreReleaseVersion -split '-')[-1])) {
+			# Normalize Prerelease comparison: treat $null and '' as equivalent
+			$expectedPrerelease1 = if ($PreReleaseVersion) { ($PreReleaseVersion -split '-')[-1] } else { '' }
+			$actualPrerelease1 = if ($installedItem1 -and $installedItem1.Prerelease) { $installedItem1.Prerelease } else { '' }
+			if ($installedItem1 -and "$($installedItem1.Version)" -eq "$TargetVersionStringOrig" -and $actualPrerelease1 -eq $expectedPrerelease1) {
 				$installedLocationFallback = $installedItem1.InstalledLocation # Path like C:\Modules\ModuleName\Version
 				New-Log "[$moduleName] Successfully installed version [$($psResourceParams.Version)] via Install-PSResource to '$installedLocationFallback'" -Level SUCCESS
 				$fallbackInstallSucceeded = $true
 			}
 		}
 		catch {
-			New-Log "[$moduleName] Install-PSResource did not version v$TargetVersionString" -Level VERBOSE
+			New-Log "[$moduleName] Install-PSResource failed for v${TargetVersionString}: $($_.Exception.Message)" -Level VERBOSE
 		}
 		if (-not $fallbackInstallSucceeded) {
 			try {
@@ -1709,7 +1732,6 @@ function Install-PSModule {
 					AcceptLicense      = $true
 					SkipPublisherCheck = $true
 					AllowClobber       = $true
-					AllowPrerelease    = if ($IsPreview) { $true } else { $false }
 					PassThru           = $true
 					Repository         = $RepositoryName
 					Verbose            = $false
@@ -1717,6 +1739,16 @@ function Install-PSModule {
 					WarningAction      = 'SilentlyContinue'
 					Confirm            = $false
 				}
+				# Only add -AllowPrerelease if it's a preview AND the command actually supports the parameter
+				# PS7's PSResourceGet Install-Module proxy does NOT support -AllowPrerelease
+				if ($IsPreview) {
+					$installModuleCmd = Get-Command -Name 'Install-Module' -ErrorAction SilentlyContinue
+					if ($installModuleCmd -and $installModuleCmd.Parameters.ContainsKey('AllowPrerelease')) {
+						$installModuleParams['AllowPrerelease'] = $true
+					}
+				}
+				# Ensure repository is trusted to prevent interactive prompts from the PSResourceGet Install-Module proxy
+				try { Set-PSResourceRepository -Name $RepositoryName -Trusted -ErrorAction SilentlyContinue } catch {}
 				New-Log "[$moduleName] Attempting Install-Module for version [$($installModuleParams.RequiredVersion)]..." -Level DEBUG
 				$installRes2 = $null # Renamed variable
 				$installRes2 = Install-Module @installModuleParams
@@ -1729,7 +1761,7 @@ function Install-PSModule {
 				}
 			}
 			catch {
-				New-Log "[$moduleName] Install-Module (last fallback) failed" -Level ERROR
+				New-Log "[$moduleName] Install-Module (last fallback) failed: $($_.Exception.Message)" -Level ERROR
 			}
 		}
 		# --- Check if fallback installation satisfied any retry paths ---
@@ -1828,27 +1860,47 @@ function Remove-OutdatedVersions {
 	# Construct the full string of the version to KEEP, including prerelease tag if present
 	[string]$latestVersionString = $LatestVersion.ToString()
 	[string]$latestVersionFullString = if ($PreReleaseVersion) { $PreReleaseVersion } else { $latestVersionString }
-	$PreReleaseTag = if ($PreReleaseVersion) { $(($PreReleaseVersion -split '-')[-1]) } else { $null }
 	New-Log "[$moduleName] Starting cleanup of old versions (keeping v$latestVersionFullString)..." -Level VERBOSE
 	$cleanedItems = [System.Collections.Generic.List[string]]::new()
 	$attemptedUninstallFor = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+	# Unload the module from current session to prevent file locks during cleanup
+	Remove-Module -Name $ModuleName -Force -ErrorAction SilentlyContinue
 	foreach ($basePath in $ModuleBasePaths) {
 		if (-not (Test-Path $basePath -PathType Container)) {
 			New-Log "[$moduleName] Base path '$basePath' for cleaning does not exist or is not a directory. Skipping." -Level WARNING
 			continue
 		}
 		New-Log "[$moduleName] Checking for old versions within '$basePath'..." -Level VERBOSE
-		# Regex remains slightly more flexible here for finding folder names
 		$versionFolders = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue -Verbose:$false | Where-Object {
-			$_.Name -match '^\d+(\.\d+){1,4}(-.+)?$' -and # Match version-like names (allows up to 5 parts)
-			$_.Name -ne $latestVersionFullString -and # Exclude the exact version string we want to keep
-			$_.Name -ne $latestVersionString
+			$folderName = $_.Name
+			# Must look like a version
+			if ($folderName -notmatch '^\d+(\.\d+){1,4}(-.+)?$') { return $false }
+			# Don't match the version we want to keep (both with and without prerelease tag)
+			if ($folderName -eq $latestVersionFullString -or $folderName -eq $latestVersionString) { return $false }
+			# Also compare as [version] objects for normalized form mismatches
+			$folderBase = ($folderName -split '-', 2)[0]
+			$keepBase = ($latestVersionFullString -split '-', 2)[0]
+			$folderVer = $null; $keepVer = $null
+			if ([version]::TryParse($folderBase, [ref]$folderVer) -and [version]::TryParse($keepBase, [ref]$keepVer)) {
+				if ($folderVer -eq $keepVer) {
+					# Base versions match — also check prerelease suffix
+					$folderPre = if ($folderName -match '-(.+)$') { $Matches[1] } else { $null }
+					$keepPre = if ($latestVersionFullString -match '-(.+)$') { $Matches[1] } else { $null }
+					if ($folderPre -eq $keepPre) { return $false }
+				}
+			}
+			return $true
 		}
 		if ($versionFolders) {
 			foreach ($versionFolder in $versionFolders) {
 				$folderPath = $versionFolder.FullName
 				$versionString = $versionFolder.Name
 				$removed = $false
+				# Parse this old version's own prerelease tag (if any) from the folder name
+				$oldPreReleaseTag = $null
+				if ($versionString -match '^(\d+(\.\d+){1,3})-(.*)') {
+					$oldPreReleaseTag = $Matches[3]
+				}
 				# Avoid double-processing if Uninstall-PSResource was already tried for this version string
 				if ($attemptedUninstallFor.Contains($versionString)) {
 					New-Log "[$moduleName] Already attempted Uninstall-PSResource for version '$versionString'. Checking existence of '$folderPath'." -Level VERBOSE
@@ -1859,11 +1911,9 @@ function Remove-OutdatedVersions {
 				}
 				if (-not $removed) {
 					New-Log "[$moduleName] Found potential old version folder: '$folderPath'. Attempting removal..." -Level DEBUG
-					if ($PSCmdlet.ShouldProcess($folderPath, "Uninstall module '$ModuleName' version '$versionString' (potentially using Uninstall-PSResource or Remove-Item)") -or $PSCmdlet.ShouldProcess($folderPath, "Uninstall module '$ModuleName' version '$versionString-$($PreReleaseTag)' (potentially using Uninstall-PSResource or Remove-Item)")) {
+					if ($PSCmdlet.ShouldProcess($folderPath, "Remove module '$ModuleName' version '$versionString'")) {
 						$uninstalledViaCmdlet = $false
-						# Attempt to uninstall via PSResource
-						New-Log "[$moduleName] Attempting Uninstall-PSResource with Version '$versionString-$($PreReleaseTag)'..." -Level VERBOSE
-						Uninstall-PSResource -Name $ModuleName -Version "$($versionString)-$($PreReleaseTag)" -Scope AllUsers -Confirm:$false -Verbose:$false -SkipDependencyCheck -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null
+						# Attempt to uninstall via PSResource using the old version's own version string
 						try {
 							New-Log "[$moduleName] Attempting Uninstall-PSResource with Version '$versionString'..." -Level VERBOSE
 							Uninstall-PSResource -Name $ModuleName -Version $versionString -Scope AllUsers -Confirm:$false -Verbose:$false -SkipDependencyCheck -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
@@ -1873,7 +1923,7 @@ function Remove-OutdatedVersions {
 							New-Log "[$moduleName] Uninstall-PSResource failed with version '$versionString'" -Level WARNING
 						}
 						$attemptedUninstallFor.Add($versionString)
-						Start-Sleep -Milliseconds 200
+						Start-Sleep -Milliseconds 50
 						# Check if the folder was removed
 						if (-not (Test-Path -LiteralPath $folderPath)) {
 							New-Log "[$moduleName] Successfully removed '$folderPath' (verified after Uninstall-PSResource attempt)." -Level SUCCESS
@@ -1882,10 +1932,7 @@ function Remove-OutdatedVersions {
 						}
 						else {
 							# Log appropriate warning based on what happened
-							if ($uninstalledViaCmdlet -and $PreReleaseTag) {
-								New-Log "[$moduleName] Uninstall-PSResource command succeeded with version '$versionString-$PreReleaseTag', but folder '$folderPath' still exists. Proceeding to Remove-Item fallback. (Permissions?)" -Level WARNING
-							}
-							elseif ($uninstalledViaCmdlet) {
+							if ($uninstalledViaCmdlet) {
 								New-Log "[$moduleName] Uninstall-PSResource command succeeded with version '$versionString', but folder '$folderPath' still exists. Proceeding to Remove-Item fallback. (Permissions?)" -Level WARNING
 							}
 							else {
@@ -1897,7 +1944,7 @@ function Remove-OutdatedVersions {
 							New-Log "[$moduleName] Attempting Remove-Item -Recurse -Force on '$folderPath'..." -Level DEBUG
 							try {
 								Remove-Item -LiteralPath $folderPath -Recurse -Force -ErrorAction Stop -Verbose:$false | Out-Null
-								Start-Sleep -Milliseconds 200
+								Start-Sleep -Milliseconds 50
 								if (-not (Test-Path -LiteralPath $folderPath)) {
 									New-Log "[$moduleName] Successfully removed old folder '$folderPath' via Remove-Item." -Level SUCCESS
 									$cleanedItems.Add($folderPath)
@@ -2035,17 +2082,17 @@ function Test-IsResourceFile {
 		return $true
 	}
 	# 2. Common resource directory names
-	if ($Path -match '\\(Resources|Resource|Localization|Localizations|Languages|Lang|Cultures|Culture|i18n|l10n)\\', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) {
+	if ($Path -match '\\(Resources|Resource|Localization|Localizations|Languages|Lang|Cultures|Culture|i18n|l10n)\\') {
 		New-Log "Path '$Path' contains common resource directory name: $($Matches[1])" -Level VERBOSE
 		return $true
 	}
 	# 3. Common resource file naming patterns (often ending in .resources.psd1 or similar)
-	if ($Path -match '(Resources|Strings|Localized|Messages|Text|Errors|Labels|UI)\.(psd1|xml)$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) {
+	if ($Path -match '(Resources|Strings|Localized|Messages|Text|Errors|Labels|UI)\.(psd1|xml)$') {
 		New-Log "Path '$Path' matches common resource file name pattern: $($Matches[0])" -Level VERBOSE
 		return $true
 	}
 	# 4. Simpler culture code format (e.g., \en\, \fr\)
-	if ($Path -match '\\([a-z]{2,3})\\[^\\]+\.(psd1|xml)$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) {
+	if ($Path -match '\\([a-z]{2,3})\\[^\\]+\.(psd1|xml)$') {
 		New-Log "Path '$Path' matches simple culture code pattern: $($Matches[1])" -Level VERBOSE
 		return $true
 	}
@@ -2498,7 +2545,7 @@ function Parse-ModuleVersion {
 	else {
 		# Base version string itself was not parseable by [version]::TryParse
 		New-Log "Parse-ModuleVersion: Could not parse base version string '$baseVersionString' (derived from original '$VersionString') into a [System.Version] object." -Level WARNING
-		return $nul
+		return $null
 	}
 }
 #endregion Parse-ModuleVersion (Helper)
@@ -2653,19 +2700,18 @@ function Compare-ModuleVersion {
 ### OBS: New-Log Function is needed otherwise remove all New-Log and replace with Write-Host. New-Log is vastly better though, check the link below:
 #Example:
 #Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1" -UseBasicParsing -MaximumRedirection 1 | Select-Object -ExpandProperty Content | Invoke-Expression
-#Check-PSResourceRepository -ImportDependencies
-<#
-Import-Module -Name ThreadJob -Force
-$ignoredModules = @('Example2.Diagnostics') #Fully ignored modules
+Check-PSResourceRepository -ImportDependencies
+#Import-Module -Name ThreadJob -Force
+$ignoredModules = @('Example2.Diagnostics', 'BurntToast') #Fully ignored modules
 $blackList = @{ #Ignored module and repo combo.
-	'Microsoft.Graph.Beta' = 'NuGetGallery'
+	'Microsoft.Graph.Beta' = @("Nuget", "NugetGallery")
 	'Microsoft.Graph'      = @("Nuget", "NugetGallery")
 }
 $paths = $env:PSModulePath.Split(';') | Where-Object { $_ -notmatch '.vscode' -and $_ -notmatch 'System32' }
 $moduleInfo = Get-ModuleInfo -Paths $paths -IgnoredModules $ignoredModules
 $outdated = Get-ModuleUpdateStatus -ModuleInventory $moduleInfo -TimeoutSeconds 120 -Repositories @("PSGallery", "Nuget", "NugetGallery") -MatchAuthor -BlackList $blackList
 if ($outdated) {
-	$res = $outdated | Update-Modules -UseProgressBar
+	$res = $outdated | Update-Modules -Clean -PreRelease -UseProgressBar
 	$res
 }
 else {
