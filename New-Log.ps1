@@ -91,11 +91,11 @@ function New-Log {
         # Creates app_20231027_153000.log
     .NOTES
         Author: Harze2k
-        Version: 5.2
-        Date: 2026-02-24
-
+        Version: 5.5
+        Date: 2026-06-28
         VERSION HISTORY:
         ================
+		v5.5 - Bug fixes
 		v5.3 - Bug fixes
         v5.2 - Bug fixes, DRY refactor, EXTENDEDERROR improvements
         ----------------------------------------------------------------
@@ -183,6 +183,7 @@ function New-Log {
 		$script:IsPipelineInput = $MyInvocation.ExpectingInput
 		$script:PipelineItemCounter = 0
 		$script:InitialErrorCount = $Error.Count
+		$script:ErrorObjectExplicit = $PSBoundParameters.ContainsKey('ErrorObject') # only trust auto -ErrorObject when caller passed it explicitly
 		$script:RotatedFiles = [System.Collections.Generic.List[string]]::new()
 		$script:LogRotated = $false
 		# Resolve log file path once in begin block so all inner functions use the same path
@@ -266,32 +267,43 @@ function New-Log {
 			if ($NoErrorLookupParameter) {
 				return $null
 			}
-			# Explicit ErrorObject parameter takes highest precedence
-			if ($null -ne $ErrorObject -and $ErrorObject -is [System.Management.Automation.ErrorRecord]) {
+			# An explicitly-passed -ErrorObject always wins (e.g. New-Log 'x' -Level ERROR -ErrorObject $_).
+			# The bind-time auto-default ($global:Error[0]) is NOT trusted here; it is only used when
+			# corroborated by a live $_ below, so stale errors never leak into non-error log calls.
+			if ($script:ErrorObjectExplicit -and $null -ne $ErrorObject -and $ErrorObject -is [System.Management.Automation.ErrorRecord]) {
 				return $ErrorObject
 			}
 			# Current pipeline item may itself be an ErrorRecord
 			if ($CurrentItem -is [System.Management.Automation.ErrorRecord]) {
 				return $CurrentItem
 			}
-			# Search scopes 1-5 for $_ that is an ErrorRecord.
-			# Scope 1 is the direct caller; higher scopes handle nested helper function scenarios
-			# where the catch block $_ may be several frames up the call stack.
+			# Search scopes 1-5 for a live $_ that is an ErrorRecord (a real catch-block context).
+			# -ErrorAction Ignore silences the common "variable '_' not found" case without adding to $global:Error.
+			# The try/catch is still required: a too-deep scope throws a TERMINATING "scope exceeds active scopes"
+			# error that Ignore does NOT suppress; we catch it and stop searching (no deeper scopes exist).
+			$errSnapshot = $global:Error.Count # baseline so a caught terminating error never lingers in $Error
+			$foundError = $null
 			for ($scope = 1; $scope -le 5; $scope++) {
 				try {
-					$scopedVar = Get-Variable -Name '_' -Scope $scope -ErrorAction Stop
-					if ($null -ne $scopedVar.Value -and $scopedVar.Value -is [System.Management.Automation.ErrorRecord]) {
-						return $scopedVar.Value
+					$scopedVar = Get-Variable -Name '_' -Scope $scope -ErrorAction Ignore # missing var = silent, no $Error pollution
+					if ($null -ne $scopedVar -and $null -ne $scopedVar.Value -and $scopedVar.Value -is [System.Management.Automation.ErrorRecord]) {
+						$foundError = $scopedVar.Value
+						break
 					}
 				}
 				catch {
-					# Variable not accessible at this scope - continue to next
+					break # scope number exceeded active scopes (terminating) - no deeper scopes to search
 				}
 			}
-			# Fall back to $Error only if a NEW error appeared since this function call started
-			if ($Error.Count -gt $script:InitialErrorCount) {
-				return $Error[0]
+			while ($global:Error.Count -gt $errSnapshot) {
+				# strip any caught terminating error so $Error stays clean
+				$global:Error.RemoveAt(0)
 			}
+			if ($null -ne $foundError) {
+				return $foundError
+			}
+			# No explicit -ErrorObject, no piped ErrorRecord, no live $_ means there is no reliable error context.
+			# Return $null instead of guessing from $global:Error, so no fabricated/stale suffix is ever produced.
 			return $null
 		}
 		#endregion Get-ErrorToProcess
