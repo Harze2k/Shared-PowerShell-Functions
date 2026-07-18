@@ -3,18 +3,14 @@
 #Requires -RunAsAdministrator
 <#
 Author:  Harze2k
-Date:    2026-07-17
-Version: 4.7
-    - Added -ReplaceLockedModuleOnReboot and -AllowVersionedSubfolder to Update-Modules.
-    - Added -MaxUpdateNumber and improved -WhatIf reporting with current/target versions, repositories, paths, and cleanup actions.
-    - Fixed parallel online metadata retrieval, per-module repository filtering, lookup result counts, and timeout handling.
-    - Added a short persistent online metadata cache, quiet cancellation of timed-out lookup jobs, and targeted lookup retries.
-    - Made Check-PSResourceRepository configure and verify only repositories selected in $repos and fail gracefully when required commands are unavailable.
-    - Added .nuspec discovery and namespace-safe NuSpec parsing with module base-path inference, SemVer 2 support, and build-template token resolution.
-    - Fixed cleanup for modules outside PSResourceGet-managed locations, including $PSHOME, and improved locked-module handling.
-    - Fixed primary-manifest/resource filtering, parallel result counts, cleanup status reporting, and operation summaries.
-    - Reduced normal-path console output and consolidated update, cleanup, timeout, and pending-reboot summaries.
-    - Suppressed PSResourceGet install, save, and uninstall progress records so -UseProgressBar is the only opt-in progress display.
+Date:    2026-07-18
+Version: 4.8
+    - Added an -OnlyCleanUpOldModules parameter set to Update-Modules that skips the update check and cleans old versions from the Get-ModuleInfo inventory ($script:moduleInfo), keeping the highest version per path.
+    - Added -CleanupBackupPath to back up each old version as <Module>\<Module>_<version>.zip before removal; a failed backup keeps that folder.
+    - Extended -ReplaceLockedModuleOnReboot to cleanup: locked or access-denied version folders are scheduled for deletion on the next restart via PendingFileRenameOperations.
+    - Added automatic ACL repair (takeown + icacls with the S-1-5-32-544 SID) and a removal retry for access-denied folders such as the built-in Pester 3.4.0.
+    - Remove-OutdatedVersions now returns a structured result; failed cleanups report CleanStatus Failed, PartiallySucceeded, or PendingReboot instead of a false NoOldVersions.
+    - Added FailedCleanPaths, CleanPendingRebootPaths, and BackupPaths to all result objects and extended the cleanup summaries with failed and pending-reboot counts plus a -ReplaceLockedModuleOnReboot hint.
 #>
 #region Check-PSResourceRepository
 function Check-PSResourceRepository {
@@ -1042,15 +1038,27 @@ function Update-Modules {
     Allows prerelease targets supplied by the input records.
     .PARAMETER ReplaceLockedModuleOnReboot
     For a locked flat module, stages replacement files and schedules the in-place update
-    for the next Windows restart.
+    for the next Windows restart. During cleanup, old version folders that cannot be
+    removed (locked files or access denied) are scheduled for deletion on the next restart.
     .PARAMETER AllowVersionedSubfolder
     For a locked flat module, installs the update in a versioned subfolder instead of
     preserving the flat layout.
+    .PARAMETER OnlyCleanUpOldModules
+    Cleanup-only mode: skips the update check and install steps entirely, scans the
+    module inventory, and removes older version folders while keeping the highest
+    version found in each path. Never removes folders newer than the retained version.
+    .PARAMETER ModuleInventory
+    Inventory from Get-ModuleInfo used by -OnlyCleanUpOldModules. Defaults to the
+    $script:moduleInfo inventory collected earlier in the session. Cleanup-only mode
+    does not scan the filesystem for additional module versions.
+    .PARAMETER CleanupBackupPath
+    Root folder that receives a <ModuleName>\<ModuleName>_<version>.zip backup of every
+    version folder before it is removed. When a backup fails that folder is not removed.
     .INPUTS
     System.Management.Automation.PSCustomObject.
     .OUTPUTS
     System.Management.Automation.PSCustomObject. Each result reports updated, failed,
-    cleaned, and pending-reboot paths.
+    cleaned, failed-clean, clean-pending-reboot, backup, and pending-reboot paths.
     .EXAMPLE
     Get-ModuleUpdateStatus -ModuleInventory $inventory |
         Update-Modules -Clean -ReplaceLockedModuleOnReboot
@@ -1060,25 +1068,42 @@ function Update-Modules {
         Update-Modules -Clean -MaxUpdateNumber 5 -WhatIf
     Reports the first five updates, including versions, repositories, paths, and
     cleanup actions, without changing any modules.
+    .EXAMPLE
+    Update-Modules -OnlyCleanUpOldModules -CleanupBackupPath 'D:\ModuleBackups'
+    Removes old module versions only (no update check), zipping each one to the backup
+    path first and keeping the highest version per path.
     .NOTES
     ReplaceLockedModuleOnReboot and AllowVersionedSubfolder are mutually exclusive.
     Administrative rights may be required for system module paths and reboot scheduling.
     .LINK
     Get-ModuleUpdateStatus
     #>
-	[CmdletBinding(SupportsShouldProcess = $true)]
+	[CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = 'Update')]
 	param (
-		[Parameter(ValueFromPipeline, Mandatory)][Object[]]$OutdatedModules,
-		[ValidateRange(1, [int]::MaxValue)][int]$MaxUpdateNumber,
-		[switch]$Clean,
+		[Parameter(ParameterSetName = 'Update', ValueFromPipeline, Mandatory)][Object[]]$OutdatedModules,
+		[Parameter(ParameterSetName = 'Update')][ValidateRange(1, [int]::MaxValue)][int]$MaxUpdateNumber,
+		[Parameter(ParameterSetName = 'Update')][switch]$Clean,
 		[switch]$UseProgressBar,
-		[switch]$PreRelease,
+		[Parameter(ParameterSetName = 'Update')][switch]$PreRelease,
 		[switch]$ReplaceLockedModuleOnReboot,
-		[switch]$AllowVersionedSubfolder
+		[Parameter(ParameterSetName = 'Update')][switch]$AllowVersionedSubfolder,
+		[Parameter(ParameterSetName = 'CleanupOnly', Mandatory)][switch]$OnlyCleanUpOldModules,
+		[Parameter(ParameterSetName = 'CleanupOnly')][System.Collections.IDictionary]$ModuleInventory,
+		[string]$CleanupBackupPath
 	)
 	begin {
 		if ($ReplaceLockedModuleOnReboot -and $AllowVersionedSubfolder) {
 			throw "Parameters -ReplaceLockedModuleOnReboot and -AllowVersionedSubfolder are mutually exclusive. Specify at most one (or neither)."
+		}
+		if ($CleanupBackupPath -and -not $WhatIfPreference) {
+			try {
+				if (-not (Test-Path -LiteralPath $CleanupBackupPath -PathType Container)) {
+					$null = New-Item -ItemType Directory -Path $CleanupBackupPath -Force -ErrorAction Stop
+				}
+			}
+			catch {
+				throw "The -CleanupBackupPath '$CleanupBackupPath' does not exist and could not be created: $($_.Exception.Message)"
+			}
 		}
 		$aggregateResults = [System.Collections.Generic.List[object]]::new()
 		$batchModules = @()
@@ -1091,6 +1116,131 @@ function Update-Modules {
 		}
 	}
 	end {
+		if ($PSCmdlet.ParameterSetName -eq 'CleanupOnly') {
+			$cleanupInventory = $ModuleInventory
+			if (-not $cleanupInventory -or $cleanupInventory.Count -eq 0) {
+				$cleanupInventory = $script:moduleInfo # Reuses the inventory that Get-ModuleInfo already collected in this session.
+			}
+			if (-not $cleanupInventory -or $cleanupInventory.Count -eq 0) {
+				New-Log "Cleanup-only mode requires -ModuleInventory or an existing `$script:moduleInfo inventory. Nothing to do." -Level WARNING
+				return
+			}
+			$cleanupModuleNames = @($cleanupInventory.Keys)
+			New-Log "Cleanup-only mode: checking $($cleanupModuleNames.Count) module(s) for old versions (keeping the highest version per path)..."
+			$cleanupIndex = 0
+			foreach ($cleanupModuleName in $cleanupModuleNames) {
+				$cleanupIndex++
+				if ($UseProgressBar.IsPresent) {
+					$progressParams = @{
+						Activity        = "Cleaning up old module versions"
+						Status          = "Checking: $cleanupModuleName"
+						PercentComplete = [math]::Round(($cleanupIndex / $cleanupModuleNames.Count) * 100)
+					}
+					Write-Progress @progressParams
+				}
+				$moduleRecords = @($cleanupInventory[$cleanupModuleName]) | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.BasePath) }
+				$recordsByPath = $moduleRecords | Group-Object -Property BasePath
+				foreach ($pathGroup in $recordsByPath) {
+					$cleanupBasePath = $pathGroup.Name
+					$versionRecords = @($pathGroup.Group | Group-Object -Property @{ Expression = {
+								if ("$($_.ModuleVersionString)" -match '-') { $_.ModuleVersionString } elseif ($_.IsPreRelease -and $_.PreReleaseLabel) { "$($_.ModuleVersionString)-$($_.PreReleaseLabel)" } else { $_.ModuleVersionString }
+							}
+						} | ForEach-Object { $_.Group[0] })
+					if ($versionRecords.Count -le 1) {
+						continue
+					}
+					$knownAuthors = @($versionRecords | ForEach-Object {
+							$normalizedAuthor = [Regex]::Replace([string]$_.Author, '[^a-zA-Z0-9]', '').ToLowerInvariant()
+							if ($normalizedAuthor) { $normalizedAuthor }
+						} | Select-Object -Unique)
+					$authorsCompatible = $true
+					for ($authorIndex = 0; $authorIndex -lt $knownAuthors.Count -and $authorsCompatible; $authorIndex++) {
+						for ($compareIndex = $authorIndex + 1; $compareIndex -lt $knownAuthors.Count; $compareIndex++) {
+							$authorA = $knownAuthors[$authorIndex]
+							$authorB = $knownAuthors[$compareIndex]
+							if (-not ($authorA.Contains($authorB) -or $authorB.Contains($authorA))) {
+								$authorsCompatible = $false
+								break
+							}
+						}
+					}
+					if (-not $authorsCompatible) {
+						$authorDetails = @($versionRecords | ForEach-Object { "$($_.ModuleVersionString)='$($_.Author)'" }) -join ', '
+						New-Log "[$cleanupModuleName] Skipping cleanup at '$cleanupBasePath': installed versions have incompatible authors ($authorDetails). This may be a repository name collision." -Level WARNING
+						continue
+					}
+					$keepRecord = $versionRecords | Sort-Object -Property @{E = { $_.ModuleVersion }; Descending = $true }, @{E = { $_.IsPreRelease }; Ascending = $true } | Select-Object -First 1
+					$keepVersionFullString = if ("$($keepRecord.ModuleVersionString)" -match '-') { $keepRecord.ModuleVersionString } elseif ($keepRecord.IsPreRelease -and $keepRecord.PreReleaseLabel) { "$($keepRecord.ModuleVersionString)-$($keepRecord.PreReleaseLabel)" } else { $keepRecord.ModuleVersionString }
+					$parsedKeep = Parse-ModuleVersion -VersionString $keepVersionFullString -ErrorAction SilentlyContinue
+					if (-not $parsedKeep -or -not $parsedKeep.ModuleVersion) {
+						New-Log "[$cleanupModuleName] Skipping cleanup at '$cleanupBasePath': could not parse the version to keep from '$keepVersionFullString'." -Level WARNING
+						continue
+					}
+					$keepPreReleaseVersion = if ($parsedKeep.IsPrerelease) { $keepVersionFullString } else { $null }
+					$oldVersionPaths = [System.Collections.Generic.List[string]]::new()
+					foreach ($oldRecord in @($versionRecords | Where-Object { $_ -ne $keepRecord })) {
+						$recordVersionString = if ("$($oldRecord.ModuleVersionString)" -match '-') { $oldRecord.ModuleVersionString } elseif ($oldRecord.IsPreRelease -and $oldRecord.PreReleaseLabel) { "$($oldRecord.ModuleVersionString)-$($oldRecord.PreReleaseLabel)" } else { $oldRecord.ModuleVersionString }
+						$versionFolderPath = Join-Path -Path $cleanupBasePath -ChildPath $recordVersionString
+						if (Test-Path -LiteralPath $versionFolderPath -PathType Container) {
+							$oldVersionPaths.Add($versionFolderPath)
+							continue
+						}
+						$flatManifestPath = Join-Path -Path $cleanupBasePath -ChildPath "$cleanupModuleName.psd1"
+						if (Test-Path -LiteralPath $flatManifestPath -PathType Leaf) {
+							try {
+								$flatManifestData = Import-PowerShellDataFile -LiteralPath $flatManifestPath -ErrorAction Stop
+								$flatVersionString = [string]$flatManifestData.ModuleVersion
+								$flatPreRelease = if ($flatManifestData.PrivateData -and $flatManifestData.PrivateData.PSData) { [string]$flatManifestData.PrivateData.PSData.Prerelease } else { $null }
+								if ($flatPreRelease) { $flatVersionString = "$flatVersionString-$flatPreRelease" }
+								if ($flatVersionString -eq $recordVersionString) {
+									$oldVersionPaths.Add($cleanupBasePath)
+									continue
+								}
+							}
+							catch {
+								New-Log "[$cleanupModuleName] Could not inspect flat manifest '$flatManifestPath': $($_.Exception.Message)" -Level WARNING
+							}
+						}
+						New-Log "[$cleanupModuleName] Inventory version '$recordVersionString' has no matching installed path below '$cleanupBasePath'. Skipping that record." -Level WARNING
+					}
+					if ($oldVersionPaths.Count -eq 0) { continue }
+					$cleanResult = Remove-OutdatedVersions -ModuleName $cleanupModuleName -ModuleBasePaths @($cleanupBasePath) -LatestVersion $parsedKeep.ModuleVersion -PreReleaseVersion $keepPreReleaseVersion -CleanupBackupPath $CleanupBackupPath -ReplaceLockedModuleOnReboot:$ReplaceLockedModuleOnReboot -OnlyRemoveOlderThanLatest -CandidateVersionPaths @($oldVersionPaths) -WhatIf:$whatIfMode -ErrorAction SilentlyContinue
+					if ($cleanResult -and $cleanResult.OldVersionCount -gt 0) {
+						$cleanupStatus = if ($whatIfMode) { 'WhatIf' } else { Get-CleanStatusFromResult -CleanResult $cleanResult }
+						$aggregateResults.Add([PSCustomObject]@{
+								ModuleName              = $cleanupModuleName
+								BasePath                = $cleanupBasePath
+								KeptVersion             = $keepVersionFullString
+								OldVersionCount         = $cleanResult.OldVersionCount
+								CleanedPaths            = @($cleanResult.CleanedPaths)
+								FailedCleanPaths        = @($cleanResult.FailedPaths)
+								CleanPendingRebootPaths = @($cleanResult.PendingRebootPaths)
+								BackupPaths             = @($cleanResult.BackupPaths)
+								CleanStatus             = $cleanupStatus
+							})
+					}
+				}
+			}
+			if ($UseProgressBar.IsPresent) {
+				Write-Progress -Activity "Cleaning up old module versions" -Completed
+			}
+			$cleanupDuration = (Get-Date) - $updateStartTime
+			$totalCleanedCount = @($aggregateResults | ForEach-Object { $_.CleanedPaths }).Count
+			$totalFailedCount = @($aggregateResults | ForEach-Object { $_.FailedCleanPaths }).Count
+			$totalPendingCount = @($aggregateResults | ForEach-Object { $_.CleanPendingRebootPaths }).Count
+			$totalBackupCount = @($aggregateResults | ForEach-Object { $_.BackupPaths }).Count
+			if ($whatIfMode) {
+				New-Log "WhatIf cleanup preview complete: $($aggregateResults.Count) module path(s) hold old versions; no changes were made." -Level SUCCESS
+			}
+			else {
+				$cleanupSummaryLevel = if ($totalFailedCount -gt 0) { 'WARNING' } else { 'SUCCESS' }
+				New-Log "Cleanup-only complete: $($cleanupModuleNames.Count) module(s) checked in $([math]::Round($cleanupDuration.TotalSeconds, 2)) seconds; $totalCleanedCount old folder(s) removed, $totalFailedCount failed, $totalPendingCount pending reboot, $totalBackupCount backed up." -Level $cleanupSummaryLevel
+			}
+			if ($totalFailedCount -gt 0 -and -not $ReplaceLockedModuleOnReboot.IsPresent) {
+				New-Log "Some old versions could not be removed (locked files or access denied). Re-run with -ReplaceLockedModuleOnReboot to schedule them for deletion on the next restart." -Level WARNING
+			}
+			return $aggregateResults
+		}
 		if ($batchModules.Count -eq 0) {
 			New-Log "No modules provided for update. Exiting."
 			return
@@ -1120,16 +1270,19 @@ function Update-Modules {
 			if (-not $parsedTargetVersion -or -not $parsedTargetVersion.ModuleVersion) {
 				New-Log "[$current/$total] Skipping module [$moduleName]: Could not parse Target Version String '$targetVersionString' using Parse-ModuleVersion. Will skip." -Level WARNING
 				$aggregateResults.Add([PSCustomObject]@{
-						ModuleName           = $moduleName
-						NewVersionPreRelease = if ($module.IsPreview) { "$($targetVersionString)-$($module.PreReleaseVersion)" }
-						NewVersion           = $targetVersionString
-						UpdatedPaths         = @()
-						FailedPaths          = @("Version parsing failed: $targetVersionString")
-						PendingRebootPaths   = @()
-						PendingReboot        = $false
-						OverallSuccess       = $false
-						CleanedPaths         = @()
-						CleanStatus          = if ($Clean.IsPresent) { 'NotRun' } else { 'NotRequested' }
+						ModuleName              = $moduleName
+						NewVersionPreRelease    = if ($module.IsPreview) { "$($targetVersionString)-$($module.PreReleaseVersion)" }
+						NewVersion              = $targetVersionString
+						UpdatedPaths            = @()
+						FailedPaths             = @("Version parsing failed: $targetVersionString")
+						PendingRebootPaths      = @()
+						PendingReboot           = $false
+						OverallSuccess          = $false
+						CleanedPaths            = @()
+						FailedCleanPaths        = @()
+						CleanPendingRebootPaths = @()
+						BackupPaths             = @()
+						CleanStatus             = if ($Clean.IsPresent) { 'NotRun' } else { 'NotRequested' }
 					})
 				continue
 			}
@@ -1140,16 +1293,19 @@ function Update-Modules {
 			if ($installAsPreview -and -not $PreRelease.IsPresent) {
 				New-Log "[$moduleName] Skipping prerelease '$preReleaseVersion'; specify -PreRelease to install it." -Level WARNING
 				$aggregateResults.Add([PSCustomObject]@{
-						ModuleName           = $moduleName
-						NewVersionPreRelease = $preReleaseVersion
-						NewVersion           = $baseVerStr
-						UpdatedPaths         = @()
-						FailedPaths          = @('Prerelease updates require -PreRelease')
-						PendingRebootPaths   = @()
-						PendingReboot        = $false
-						OverallSuccess       = $false
-						CleanedPaths         = @()
-						CleanStatus          = if ($Clean.IsPresent) { 'NotRun' } else { 'NotRequested' }
+						ModuleName              = $moduleName
+						NewVersionPreRelease    = $preReleaseVersion
+						NewVersion              = $baseVerStr
+						UpdatedPaths            = @()
+						FailedPaths             = @('Prerelease updates require -PreRelease')
+						PendingRebootPaths      = @()
+						PendingReboot           = $false
+						OverallSuccess          = $false
+						CleanedPaths            = @()
+						FailedCleanPaths        = @()
+						CleanPendingRebootPaths = @()
+						BackupPaths             = @()
+						CleanStatus             = if ($Clean.IsPresent) { 'NotRun' } else { 'NotRequested' }
 					})
 				continue
 			}
@@ -1158,16 +1314,19 @@ function Update-Modules {
 			if ($outdatedPaths.Count -eq 0) {
 				New-Log "[$moduleName][$current/$total] Skipping module: No valid outdated base paths found where old versions exist. (Checked: $($module.OutdatedModules.Path -join '; '))." -Level WARNING
 				$aggregateResults.Add([PSCustomObject]@{
-						ModuleName           = $moduleName
-						NewVersionPreRelease = if ($module.IsPreview) { $preReleaseVersion }
-						NewVersion           = $baseVerStr
-						UpdatedPaths         = @()
-						FailedPaths          = @("No valid source paths provided or accessible")
-						PendingRebootPaths   = @()
-						PendingReboot        = $false
-						OverallSuccess       = $false
-						CleanedPaths         = @()
-						CleanStatus          = if ($Clean.IsPresent) { 'NotRun' } else { 'NotRequested' }
+						ModuleName              = $moduleName
+						NewVersionPreRelease    = if ($module.IsPreview) { $preReleaseVersion }
+						NewVersion              = $baseVerStr
+						UpdatedPaths            = @()
+						FailedPaths             = @("No valid source paths provided or accessible")
+						PendingRebootPaths      = @()
+						PendingReboot           = $false
+						OverallSuccess          = $false
+						CleanedPaths            = @()
+						FailedCleanPaths        = @()
+						CleanPendingRebootPaths = @()
+						BackupPaths             = @()
+						CleanStatus             = if ($Clean.IsPresent) { 'NotRun' } else { 'NotRequested' }
 					})
 				continue
 			}
@@ -1198,36 +1357,42 @@ function Update-Modules {
 				if ($whatIfMode) {
 					New-Log "[WhatIf][$moduleName][$current/$total] Would update version(s) [$($outdatedVersions -join ', ')] to [$displayVersion] from '$repository' at: $($outdatedPaths -join '; ')"
 					$aggregateResults.Add([PSCustomObject]@{
-							ModuleName           = $moduleName
-							Status               = 'WhatIf'
-							CurrentVersions      = @($outdatedVersions)
-							NewVersionPreRelease = if ($module.IsPreview) { $preReleaseVersion }
-							NewVersion           = $baseVerStr
-							Repository           = $repository
-							TargetPaths          = @($outdatedPaths)
-							WouldClean           = $Clean.IsPresent
-							UpdatedPaths         = @()
-							FailedPaths          = @()
-							PendingRebootPaths   = @()
-							PendingReboot        = $false
-							OverallSuccess       = $null
-							CleanedPaths         = @()
-							CleanStatus          = if ($Clean.IsPresent) { 'WhatIf' } else { 'NotRequested' }
+							ModuleName              = $moduleName
+							Status                  = 'WhatIf'
+							CurrentVersions         = @($outdatedVersions)
+							NewVersionPreRelease    = if ($module.IsPreview) { $preReleaseVersion }
+							NewVersion              = $baseVerStr
+							Repository              = $repository
+							TargetPaths             = @($outdatedPaths)
+							WouldClean              = $Clean.IsPresent
+							UpdatedPaths            = @()
+							FailedPaths             = @()
+							PendingRebootPaths      = @()
+							PendingReboot           = $false
+							OverallSuccess          = $null
+							CleanedPaths            = @()
+							FailedCleanPaths        = @()
+							CleanPendingRebootPaths = @()
+							BackupPaths             = @()
+							CleanStatus             = if ($Clean.IsPresent) { 'WhatIf' } else { 'NotRequested' }
 						})
 				}
 				else {
 					New-Log "[$moduleName][$current/$total] Skipped update due to ShouldProcess user choice." -Level WARNING
 					$aggregateResults.Add([PSCustomObject]@{
-							ModuleName           = $moduleName
-							NewVersionPreRelease = if ($module.IsPreview) { $preReleaseVersion }
-							NewVersion           = $baseVerStr
-							UpdatedPaths         = @()
-							FailedPaths          = @("Skipped by ShouldProcess")
-							PendingRebootPaths   = @()
-							PendingReboot        = $false
-							OverallSuccess       = $false
-							CleanedPaths         = @()
-							CleanStatus          = if ($Clean.IsPresent) { 'NotRun' } else { 'NotRequested' }
+							ModuleName              = $moduleName
+							NewVersionPreRelease    = if ($module.IsPreview) { $preReleaseVersion }
+							NewVersion              = $baseVerStr
+							UpdatedPaths            = @()
+							FailedPaths             = @("Skipped by ShouldProcess")
+							PendingRebootPaths      = @()
+							PendingReboot           = $false
+							OverallSuccess          = $false
+							CleanedPaths            = @()
+							FailedCleanPaths        = @()
+							CleanPendingRebootPaths = @()
+							BackupPaths             = @()
+							CleanStatus             = if ($Clean.IsPresent) { 'NotRun' } else { 'NotRequested' }
 						})
 				}
 			}
@@ -1241,6 +1406,15 @@ function Update-Modules {
 				New-Log "No modules approved for installation after pre-processing. Exiting."
 			}
 			return $aggregateResults
+		}
+		$psResourceGetModule = Get-Module -Name 'Microsoft.PowerShell.PSResourceGet' | Sort-Object Version -Descending | Select-Object -First 1
+		if (-not $psResourceGetModule) {
+			$psResourceGetModule = Import-Module -Name 'Microsoft.PowerShell.PSResourceGet' -PassThru -ErrorAction Stop -Verbose:$false | Sort-Object Version -Descending | Select-Object -First 1
+		}
+		$psResourceGetManifestPath = Join-Path -Path $psResourceGetModule.ModuleBase -ChildPath 'Microsoft.PowerShell.PSResourceGet.psd1'
+		$psResourceGetModulePath = if (Test-Path -LiteralPath $psResourceGetManifestPath -PathType Leaf) { $psResourceGetManifestPath } else { [string]$psResourceGetModule.Path }
+		if ([string]::IsNullOrWhiteSpace($psResourceGetModulePath)) {
+			throw 'Microsoft.PowerShell.PSResourceGet is loaded, but its module path could not be resolved for the parallel installer runspaces.'
 		}
 		$installThrottleLimit = [Math]::Min($modulesToInstall.Count, [Math]::Max(4, [System.Environment]::ProcessorCount * 2))
 		New-Log "Installing $($modulesToInstall.Count) module update(s) in parallel (throttle $installThrottleLimit)..."
@@ -1259,26 +1433,31 @@ function Update-Modules {
 			$parallelInstallResults = $using:parallelInstallResults
 			${function:New-Log} = $using:NewLogDef
 			${function:Install-PSModule} = $using:InstallPSModuleDef
-			Import-Module -Name 'Microsoft.PowerShell.PSResourceGet' -Global -Force -Verbose:$false
 			try {
+				if (-not (Get-Module -Name 'Microsoft.PowerShell.PSResourceGet')) {
+					Import-Module -Name $using:psResourceGetModulePath -ErrorAction Stop -Verbose:$false
+				}
 				New-Log "[$moduleName] Installing version [$($preparedModule.TargetVersionString)]..." -Level VERBOSE
 				$installResult = Install-PSModule -ModuleName $moduleName -TargetVersionString $preparedModule.TargetVersionString -PreReleaseVersion $preparedModule.PreReleaseVersion -RepositoryName $preparedModule.Repository -IsPreview $preparedModule.InstallAsPreview -Destinations $preparedModule.OutdatedPaths -ReplaceLockedModuleOnReboot $using:replaceLockedOnReboot -AllowVersionedSubfolder $using:allowVersionedSubfolder -ErrorAction SilentlyContinue
 				$pendingRebootPaths = @($installResult.PendingRebootPaths)
 				$finalResult = [PSCustomObject]@{
-					ModuleName           = $moduleName
-					NewVersionPreRelease = if ($preparedModule.IsPreview) { $preparedModule.PreReleaseVersion }
-					NewVersion           = $preparedModule.BaseVerStr
-					UpdatedPaths         = @($installResult.UpdatedPaths)
-					FailedPaths          = if ($installResult.FailedPaths) { @($installResult.FailedPaths) } else { @() }
-					PendingRebootPaths   = $pendingRebootPaths
-					PendingReboot        = ($pendingRebootPaths.Count -gt 0)
-					OverallSuccess       = (@($installResult.FailedPaths).Count -eq 0 -and @($installResult.UpdatedPaths).Count -gt 0)
-					CleanedPaths         = @()
-					CleanStatus          = 'NotRequested'
-					_OutdatedVersions    = $preparedModule.OutdatedVersions
-					_LatestVer           = $preparedModule.LatestVer
-					_PreReleaseVersion   = $preparedModule.PreReleaseVersion
-					_CleanApproved       = $preparedModule.CleanApproved
+					ModuleName              = $moduleName
+					NewVersionPreRelease    = if ($preparedModule.IsPreview) { $preparedModule.PreReleaseVersion }
+					NewVersion              = $preparedModule.BaseVerStr
+					UpdatedPaths            = @($installResult.UpdatedPaths)
+					FailedPaths             = if ($installResult.FailedPaths) { @($installResult.FailedPaths) } else { @() }
+					PendingRebootPaths      = $pendingRebootPaths
+					PendingReboot           = ($pendingRebootPaths.Count -gt 0)
+					OverallSuccess          = (@($installResult.FailedPaths).Count -eq 0 -and @($installResult.UpdatedPaths).Count -gt 0)
+					CleanedPaths            = @()
+					FailedCleanPaths        = @()
+					CleanPendingRebootPaths = @()
+					BackupPaths             = @()
+					CleanStatus             = 'NotRequested'
+					_OutdatedVersions       = $preparedModule.OutdatedVersions
+					_LatestVer              = $preparedModule.LatestVer
+					_PreReleaseVersion      = $preparedModule.PreReleaseVersion
+					_CleanApproved          = $preparedModule.CleanApproved
 				}
 				$parallelInstallResults.Add($finalResult)
 				if ($finalResult.PendingReboot) {
@@ -1297,20 +1476,23 @@ function Update-Modules {
 			catch {
 				New-Log "[$moduleName] Unhandled error during parallel install." -Level ERROR
 				$parallelInstallResults.Add([PSCustomObject]@{
-						ModuleName           = $moduleName
-						NewVersionPreRelease = if ($preparedModule.IsPreview) { $preparedModule.PreReleaseVersion }
-						NewVersion           = $preparedModule.BaseVerStr
-						UpdatedPaths         = @()
-						FailedPaths          = @("Parallel install error: $($_.Exception.Message)")
-						PendingRebootPaths   = @()
-						PendingReboot        = $false
-						OverallSuccess       = $false
-						CleanedPaths         = @()
-						CleanStatus          = if ($using:useClean) { 'NotRun' } else { 'NotRequested' }
-						_OutdatedVersions    = $preparedModule.OutdatedVersions
-						_LatestVer           = $preparedModule.LatestVer
-						_PreReleaseVersion   = $preparedModule.PreReleaseVersion
-						_CleanApproved       = $false
+						ModuleName              = $moduleName
+						NewVersionPreRelease    = if ($preparedModule.IsPreview) { $preparedModule.PreReleaseVersion }
+						NewVersion              = $preparedModule.BaseVerStr
+						UpdatedPaths            = @()
+						FailedPaths             = @("Parallel install error: $($_.Exception.Message)")
+						PendingRebootPaths      = @()
+						PendingReboot           = $false
+						OverallSuccess          = $false
+						CleanedPaths            = @()
+						FailedCleanPaths        = @()
+						CleanPendingRebootPaths = @()
+						BackupPaths             = @()
+						CleanStatus             = if ($using:useClean) { 'NotRun' } else { 'NotRequested' }
+						_OutdatedVersions       = $preparedModule.OutdatedVersions
+						_LatestVer              = $preparedModule.LatestVer
+						_PreReleaseVersion      = $preparedModule.PreReleaseVersion
+						_CleanApproved          = $false
 					})
 			}
 		}
@@ -1325,6 +1507,9 @@ function Update-Modules {
 			$moduleName = $finalResult.ModuleName
 			$postProcessIndex++
 			$finalResult.CleanedPaths = @($finalResult.CleanedPaths)
+			$finalResult.FailedCleanPaths = @($finalResult.FailedCleanPaths)
+			$finalResult.CleanPendingRebootPaths = @($finalResult.CleanPendingRebootPaths)
+			$finalResult.BackupPaths = @($finalResult.BackupPaths)
 			$finalResult.CleanStatus = if ($useClean) { 'NotRun' } else { 'NotRequested' }
 			if ($UseProgressBar.IsPresent) {
 				$progressParams = @{
@@ -1337,15 +1522,37 @@ function Update-Modules {
 			}
 			if ($finalResult.OverallSuccess -and $useClean) {
 				if ($finalResult._CleanApproved) {
-					$cleanedPathsResult = @(Remove-OutdatedVersions -ModuleName $moduleName -ModuleBasePaths $finalResult.UpdatedPaths -LatestVersion $finalResult._LatestVer -PreReleaseVersion $finalResult._PreReleaseVersion -ErrorAction SilentlyContinue | Where-Object { $_ -is [string] })
-					if ($cleanedPathsResult.Count -gt 0) {
-						$finalResult.CleanedPaths = $cleanedPathsResult
-						$finalResult.CleanStatus = 'Succeeded'
-						New-Log "[$moduleName] Successfully cleaned $($cleanedPathsResult.Count) old items: $($cleanedPathsResult -join '; ')" -Level SUCCESS
+					$cleanResult = Remove-OutdatedVersions -ModuleName $moduleName -ModuleBasePaths $finalResult.UpdatedPaths -LatestVersion $finalResult._LatestVer -PreReleaseVersion $finalResult._PreReleaseVersion -CleanupBackupPath $CleanupBackupPath -ReplaceLockedModuleOnReboot:$ReplaceLockedModuleOnReboot -ErrorAction SilentlyContinue
+					if ($cleanResult) {
+						$finalResult.CleanedPaths = @($cleanResult.CleanedPaths)
+						$finalResult.FailedCleanPaths = @($cleanResult.FailedPaths)
+						$finalResult.CleanPendingRebootPaths = @($cleanResult.PendingRebootPaths)
+						$finalResult.BackupPaths = @($cleanResult.BackupPaths)
+						$finalResult.CleanStatus = Get-CleanStatusFromResult -CleanResult $cleanResult
+						switch ($finalResult.CleanStatus) {
+							'Succeeded' {
+								New-Log "[$moduleName] Successfully cleaned $(@($cleanResult.CleanedPaths).Count) old items: $(@($cleanResult.CleanedPaths) -join '; ')" -Level SUCCESS
+							}
+							'NoOldVersions' {
+								New-Log "[$moduleName] No old version folders required removal." -Level VERBOSE
+							}
+							'PendingReboot' {
+								New-Log "[$moduleName] Old version folder(s) will be deleted on the next restart: $(@($cleanResult.PendingRebootPaths) -join '; ')" -Level WARNING
+							}
+							'Skipped' {
+								New-Log "[$moduleName] Skipped cleaning due to ShouldProcess user choice." -Level WARNING
+							}
+							default {
+								New-Log "[$moduleName] Cleanup $($finalResult.CleanStatus): cleaned $(@($cleanResult.CleanedPaths).Count), failed $(@($cleanResult.FailedPaths).Count): $((@($cleanResult.FailedPaths) | ForEach-Object { "$($_.Path) ($($_.Reason))" }) -join '; ')." -Level WARNING
+							}
+						}
+						if (@($cleanResult.BackupPaths).Count -gt 0) {
+							New-Log "[$moduleName] Backed up $(@($cleanResult.BackupPaths).Count) old version(s) to: $(@($cleanResult.BackupPaths) -join '; ')"
+						}
 					}
 					else {
-						$finalResult.CleanStatus = 'NoOldVersions'
-						New-Log "[$moduleName] No old version folders required removal." -Level VERBOSE
+						$finalResult.CleanStatus = 'NotRun'
+						New-Log "[$moduleName] Cleanup did not return a result; treating it as not run." -Level WARNING
 					}
 				}
 				else {
@@ -1391,7 +1598,14 @@ function Update-Modules {
 			$cleanNotNeeded = @($aggregateResults | Where-Object CleanStatus -EQ 'NoOldVersions')
 			$cleanSkipped = @($aggregateResults | Where-Object CleanStatus -EQ 'Skipped')
 			$cleanNotRun = @($aggregateResults | Where-Object CleanStatus -EQ 'NotRun')
-			New-Log "Cleanup summary: $($cleanedModules.Count) cleaned, $($cleanNotNeeded.Count) already clean, $($cleanSkipped.Count) skipped, $($cleanNotRun.Count) not run."
+			$cleanFailed = @($aggregateResults | Where-Object { $_.CleanStatus -in @('Failed', 'PartiallySucceeded') })
+			$cleanPendingReboot = @($aggregateResults | Where-Object CleanStatus -EQ 'PendingReboot')
+			$cleanupSummaryLevel = if ($cleanFailed.Count -gt 0) { 'WARNING' } else { 'INFO' }
+			New-Log "Cleanup summary: $($cleanedModules.Count) cleaned, $($cleanNotNeeded.Count) already clean, $($cleanSkipped.Count) skipped, $($cleanNotRun.Count) not run, $($cleanFailed.Count) failed or partial, $($cleanPendingReboot.Count) pending reboot." -Level $cleanupSummaryLevel
+			if ($cleanFailed.Count -gt 0 -and -not $ReplaceLockedModuleOnReboot.IsPresent) {
+				$failedCleanDetails = ($cleanFailed | ForEach-Object { "[$($_.ModuleName)] $((@($_.FailedCleanPaths) | ForEach-Object { "$($_.Path) ($($_.Reason))" }) -join '; ')" }) -join ' | '
+				New-Log "Old versions that could not be removed: $failedCleanDetails. Re-run with -ReplaceLockedModuleOnReboot to schedule locked or denied folders for deletion on the next restart." -Level WARNING
+			}
 		}
 		return $aggregateResults
 	}
@@ -1724,6 +1938,234 @@ function Install-PSModule {
 	return $result
 }
 #endregion Install-PSModule
+#region Backup-ModuleVersionFolder
+function Backup-ModuleVersionFolder {
+	<#
+    .SYNOPSIS
+    Creates a zip backup of one module version folder.
+    .DESCRIPTION
+    Compresses a version folder to <BackupRootPath>\<ModuleName>\<ModuleName>_<version>.zip
+    before the folder is removed. An existing archive for the same version is replaced
+    and a half-written archive is deleted on failure.
+    .PARAMETER ModuleName
+    Name of the module the version folder belongs to.
+    .PARAMETER VersionFolderPath
+    Full path of the version folder to back up.
+    .PARAMETER BackupRootPath
+    Root folder that receives the backup archives.
+    .INPUTS
+    None.
+    .OUTPUTS
+    System.String. Full path of the created archive, or $null when the backup failed.
+    .EXAMPLE
+    Backup-ModuleVersionFolder -ModuleName Pester -VersionFolderPath 'C:\Program Files\WindowsPowerShell\Modules\Pester\3.4.0' -BackupRootPath 'D:\ModuleBackups'
+    Creates D:\ModuleBackups\Pester\Pester_3.4.0.zip.
+    .NOTES
+    The archive contains the version folder itself so it can be extracted straight into
+    a module base path.
+    .LINK
+    Remove-OutdatedVersions
+    #>
+	[CmdletBinding()]
+	[OutputType([string])]
+	param (
+		[Parameter(Mandatory)][string]$ModuleName,
+		[Parameter(Mandatory)][string]$VersionFolderPath,
+		[Parameter(Mandatory)][string]$BackupRootPath
+	)
+	$backupZipPath = $null
+	try {
+		$versionString = Split-Path $VersionFolderPath -Leaf
+		$moduleBackupDir = Join-Path $BackupRootPath $ModuleName
+		if (-not (Test-Path -LiteralPath $moduleBackupDir -PathType Container)) {
+			$null = New-Item -ItemType Directory -Path $moduleBackupDir -Force -ErrorAction Stop
+		}
+		$backupZipPath = Join-Path $moduleBackupDir ("{0}_{1}.zip" -f $ModuleName, $versionString)
+		if (Test-Path -LiteralPath $backupZipPath -PathType Leaf) {
+			Remove-Item -LiteralPath $backupZipPath -Force -ErrorAction Stop # The same module and version produce the same content, so an existing archive is replaced.
+		}
+		Add-Type -AssemblyName 'System.IO.Compression.FileSystem' -ErrorAction SilentlyContinue
+		[System.IO.Compression.ZipFile]::CreateFromDirectory($VersionFolderPath, $backupZipPath, [System.IO.Compression.CompressionLevel]::Optimal, $true) # $true keeps the version folder as the archive root for easy restore.
+		if ((Test-Path -LiteralPath $backupZipPath -PathType Leaf) -and ((Get-Item -LiteralPath $backupZipPath -ErrorAction Stop).Length -gt 0)) {
+			New-Log "[$ModuleName] Backed up '$VersionFolderPath' to '$backupZipPath'." -Level VERBOSE
+			return $backupZipPath
+		}
+		New-Log "[$ModuleName] Backup archive '$backupZipPath' was not created or is empty." -Level WARNING
+		return $null
+	}
+	catch {
+		New-Log "[$ModuleName] Failed to back up '$VersionFolderPath' to '$BackupRootPath'" -Level ERROR
+		if ($backupZipPath -and (Test-Path -LiteralPath $backupZipPath -PathType Leaf)) { Remove-Item -LiteralPath $backupZipPath -Force -ErrorAction SilentlyContinue } # Never leave a half-written archive behind.
+		return $null
+	}
+}
+#endregion Backup-ModuleVersionFolder
+#region Repair-ModuleFolderAcl
+function Repair-ModuleFolderAcl {
+	<#
+    .SYNOPSIS
+    Repairs ownership and permissions on a module version folder.
+    .DESCRIPTION
+    Takes ownership for the Administrators group and resets the ACL with icacls so a
+    protected folder can be removed. This handles folders like the built-in Pester
+    3.4.0 where TrustedInstaller is the owner and even elevated administrators only
+    have read and execute permissions. The Administrators group is addressed by its
+    SID S-1-5-32-544 so the repair works on all Windows languages.
+    .PARAMETER ModuleName
+    Name of the module, used for logging.
+    .PARAMETER FolderPath
+    Full path of the version folder to repair.
+    .INPUTS
+    None.
+    .OUTPUTS
+    System.Boolean. $true when every repair step succeeded.
+    .EXAMPLE
+    Repair-ModuleFolderAcl -ModuleName Pester -FolderPath 'C:\Program Files\WindowsPowerShell\Modules\Pester\3.4.0'
+    Makes the built-in Pester 3.4.0 folder removable by an elevated session.
+    .NOTES
+    Requires administrator rights for folders owned by TrustedInstaller. The takeown /D
+    answer is localized, so both Y and J are tried.
+    .LINK
+    Remove-OutdatedVersions
+    #>
+	[CmdletBinding()]
+	[OutputType([bool])]
+	param (
+		[Parameter(Mandatory)][string]$ModuleName,
+		[Parameter(Mandatory)][string]$FolderPath
+	)
+	if (-not $IsWindows) {
+		New-Log "[$ModuleName] ACL repair is only supported on Windows. Skipping for '$FolderPath'." -Level VERBOSE
+		return $false
+	}
+	$aclRepaired = $true
+	try {
+		New-Log "[$ModuleName] Attempting ACL repair of '$FolderPath' (takeown + icacls)..." -Level DEBUG
+		$takeownOutput = & takeown.exe /F "$FolderPath" /A /R /D Y 2>&1 # /A assigns ownership to the Administrators group instead of the current user.
+		if ($LASTEXITCODE -ne 0) {
+			$takeownOutput = & takeown.exe /F "$FolderPath" /A /R /D J 2>&1 # The /D answer is localized (Y in English, J in for example Swedish and German), so both are tried.
+		}
+		if ($LASTEXITCODE -ne 0) {
+			New-Log "[$ModuleName] takeown returned exit code $LASTEXITCODE for '$FolderPath'; continuing with icacls anyway. Last output: $(@($takeownOutput) | Select-Object -Last 1)" -Level VERBOSE
+			$aclRepaired = $false
+		}
+		$icaclsResetOutput = & icacls.exe "$FolderPath" /reset /T /C /Q 2>&1 # /reset restores inherited permissions which removes protected ACLs like the built-in Pester 3.4.0 ones.
+		if ($LASTEXITCODE -ne 0) {
+			New-Log "[$ModuleName] icacls /reset returned exit code $LASTEXITCODE for '$FolderPath'. Last output: $(@($icaclsResetOutput) | Select-Object -Last 1)" -Level VERBOSE
+			$aclRepaired = $false
+		}
+		$icaclsGrantOutput = & icacls.exe "$FolderPath" /grant "*S-1-5-32-544:(OI)(CI)F" /T /C /Q 2>&1 # Grants the Administrators group full control in case inheritance is disabled on the parent.
+		if ($LASTEXITCODE -ne 0) {
+			New-Log "[$ModuleName] icacls /grant returned exit code $LASTEXITCODE for '$FolderPath'. Last output: $(@($icaclsGrantOutput) | Select-Object -Last 1)" -Level VERBOSE
+			$aclRepaired = $false
+		}
+		if ($aclRepaired) {
+			New-Log "[$ModuleName] ACL repair of '$FolderPath' completed." -Level VERBOSE
+		}
+		return $aclRepaired
+	}
+	catch {
+		New-Log "[$ModuleName] ACL repair of '$FolderPath' failed" -Level ERROR
+		return $false
+	}
+}
+#endregion Repair-ModuleFolderAcl
+#region Register-PendingDeleteOnReboot
+function Register-PendingDeleteOnReboot {
+	<#
+    .SYNOPSIS
+    Schedules a folder for deletion on the next restart.
+    .DESCRIPTION
+    Registers every file and subfolder of the supplied folder, and the folder itself,
+    in PendingFileRenameOperations using MoveFileEx with MOVEFILE_DELAY_UNTIL_REBOOT.
+    Files are scheduled before their parent folders so each folder is empty when its
+    deletion runs during the next boot.
+    .PARAMETER ModuleName
+    Name of the module, used for logging.
+    .PARAMETER FolderPath
+    Full path of the folder to schedule for deletion.
+    .INPUTS
+    None.
+    .OUTPUTS
+    System.Management.Automation.PSCustomObject with Scheduled and Failed counts.
+    .EXAMPLE
+    Register-PendingDeleteOnReboot -ModuleName Pester -FolderPath 'C:\Program Files\WindowsPowerShell\Modules\Pester\3.4.0'
+    Deletes the locked folder during the next Windows restart.
+    .NOTES
+    Requires administrator rights. Windows-specific.
+    .LINK
+    Remove-OutdatedVersions
+    #>
+	[CmdletBinding()]
+	[OutputType([pscustomobject])]
+	param (
+		[Parameter(Mandatory)][string]$ModuleName,
+		[Parameter(Mandatory)][string]$FolderPath
+	)
+	$scheduledCount = 0
+	$failedCount = 0
+	if (-not $IsWindows) {
+		New-Log "[$ModuleName] Delete-on-reboot scheduling is only supported on Windows. Skipping for '$FolderPath'." -Level VERBOSE
+		return [pscustomobject]@{ Scheduled = 0; Failed = 1 }
+	}
+	try {
+		if (-not ('Win32UpdMod.PendingMove' -as [type])) {
+			Add-Type -Namespace 'Win32UpdMod' -Name 'PendingMove' -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern bool MoveFileEx(string lpExistingFileName, string lpNewFileName, int dwFlags);' -ErrorAction Stop
+		}
+		$delayUntilRebootFlag = 4 # MOVEFILE_DELAY_UNTIL_REBOOT with a null destination deletes the path during the next boot.
+		$allItems = @(Get-ChildItem -LiteralPath $FolderPath -Recurse -Force -ErrorAction SilentlyContinue)
+		$orderedTargets = @($allItems | Where-Object { -not $_.PSIsContainer } | Select-Object -ExpandProperty FullName) # Files must be scheduled before the folders that contain them.
+		$orderedTargets += @($allItems | Where-Object { $_.PSIsContainer } | Sort-Object -Property @{E = { $_.FullName.Length }; Descending = $true } | Select-Object -ExpandProperty FullName) # Deepest folders first so each one is empty when its deletion runs.
+		$orderedTargets += $FolderPath
+		foreach ($target in $orderedTargets) {
+			if ([Win32UpdMod.PendingMove]::MoveFileEx($target, $null, $delayUntilRebootFlag)) { $scheduledCount++ } else { $failedCount++ }
+		}
+	}
+	catch {
+		New-Log "[$ModuleName] Could not schedule '$FolderPath' for deletion on reboot" -Level ERROR
+		$failedCount++
+	}
+	return [pscustomobject]@{ Scheduled = $scheduledCount; Failed = $failedCount }
+}
+#endregion Register-PendingDeleteOnReboot
+#region Get-CleanStatusFromResult
+function Get-CleanStatusFromResult {
+	<#
+    .SYNOPSIS
+    Derives a CleanStatus value from a Remove-OutdatedVersions result.
+    .DESCRIPTION
+    Maps the cleaned, failed, pending-reboot, and skipped path counts of a structured
+    cleanup result to one CleanStatus string: NoOldVersions, Succeeded, PendingReboot,
+    PartiallySucceeded, Failed, or Skipped.
+    .PARAMETER CleanResult
+    Structured result object returned by Remove-OutdatedVersions.
+    .INPUTS
+    None.
+    .OUTPUTS
+    System.String.
+    .EXAMPLE
+    $cleanStatus = Get-CleanStatusFromResult -CleanResult $cleanResult
+    .NOTES
+    Skipped means every found folder was declined via ShouldProcess.
+    .LINK
+    Remove-OutdatedVersions
+    #>
+	[CmdletBinding()]
+	[OutputType([string])]
+	param (
+		[Parameter(Mandatory)][pscustomobject]$CleanResult
+	)
+	$cleanedCount = @($CleanResult.CleanedPaths).Count
+	$failedCount = @($CleanResult.FailedPaths).Count
+	$pendingCount = @($CleanResult.PendingRebootPaths).Count
+	if (($cleanedCount + $failedCount + $pendingCount + @($CleanResult.SkippedPaths).Count) -eq 0) { return 'NoOldVersions' }
+	if ($failedCount -eq 0 -and $pendingCount -eq 0 -and $cleanedCount -eq 0) { return 'Skipped' }
+	if ($failedCount -eq 0 -and $pendingCount -eq 0) { return 'Succeeded' }
+	if ($failedCount -eq 0) { return 'PendingReboot' }
+	if (($cleanedCount + $pendingCount) -gt 0) { return 'PartiallySucceeded' }
+	return 'Failed'
+}
+#endregion Get-CleanStatusFromResult
 #region Remove-OutdatedVersions
 function Remove-OutdatedVersions {
 	<#
@@ -1732,7 +2174,11 @@ function Remove-OutdatedVersions {
     .DESCRIPTION
     Preserves the requested version and removes other version folders from each module
     base path. Managed CurrentUser and AllUsers installations use Uninstall-PSResource
-    first; other locations are removed directly with retry handling.
+    first; other locations are removed directly with retry handling. Access-denied
+    folders get an ACL repair (takeown and icacls) followed by one more removal attempt.
+    With -ReplaceLockedModuleOnReboot, folders that still cannot be removed are
+    scheduled for deletion on the next restart. With -CleanupBackupPath, every folder
+    is zipped before removal and a failed backup skips that removal.
     .PARAMETER ModuleName
     Name of the module to clean.
     .PARAMETER ModuleBasePaths
@@ -1743,10 +2189,22 @@ function Remove-OutdatedVersions {
     Module names that must never be cleaned.
     .PARAMETER PreReleaseVersion
     Full prerelease version string that must be preserved, when applicable.
+    .PARAMETER CleanupBackupPath
+    Root folder that receives a <ModuleName>\<ModuleName>_<version>.zip backup of each
+    version folder before it is removed. When the backup fails the folder is kept.
+    .PARAMETER ReplaceLockedModuleOnReboot
+    Schedules version folders that cannot be removed for deletion on the next restart.
+    .PARAMETER OnlyRemoveOlderThanLatest
+    Removes only folders whose parsed version is lower than LatestVersion. Folders with
+    a higher or unparsable version are kept. Used by the cleanup-only mode as a safety net.
+    .PARAMETER CandidateVersionPaths
+    Exact existing paths that cleanup-only mode is allowed to remove. A numeric path is
+    treated as a version directory; a module base path represents an older flat install.
     .INPUTS
     None.
     .OUTPUTS
-    System.String. Paths of version directories removed successfully.
+    System.Management.Automation.PSCustomObject with CleanedPaths, FailedPaths (Path and
+    Reason), PendingRebootPaths, SkippedPaths, BackupPaths, and OldVersionCount.
     .EXAMPLE
     Remove-OutdatedVersions -ModuleName Pester -ModuleBasePaths 'C:\Modules\Pester' -LatestVersion 5.7.1
     Removes Pester version folders other than 5.7.1.
@@ -1761,21 +2219,78 @@ function Remove-OutdatedVersions {
 		[Parameter(Mandatory)][string]$ModuleName,
 		[Parameter(Mandatory)][string[]]$ModuleBasePaths,
 		[Parameter(Mandatory)][version]$LatestVersion,
-		[string[]]$DoNotClean = @('PowerShellGet', 'Microsoft.PowerShell.PSResourceGet'),
-		[string]$PreReleaseVersion = $null
+		[string[]]$DoNotClean = @('PackageManagement', 'PowerShellGet', 'Microsoft.PowerShell.PSResourceGet'),
+		[string]$PreReleaseVersion = $null,
+		[string]$CleanupBackupPath,
+		[switch]$ReplaceLockedModuleOnReboot,
+		[switch]$OnlyRemoveOlderThanLatest,
+		[string[]]$CandidateVersionPaths
 	)
+	function Get-RemoveFailureReason {
+		[OutputType([string])]
+		param (
+			[AllowNull()][System.Exception]$Exception
+		)
+		$currentException = $Exception
+		while ($currentException) {
+			if ($currentException -is [System.UnauthorizedAccessException]) { return 'AccessDenied' }
+			if ($currentException -is [System.IO.IOException] -and $currentException -isnot [System.IO.FileNotFoundException] -and $currentException -isnot [System.IO.DirectoryNotFoundException]) { return 'Locked' }
+			$currentException = $currentException.InnerException
+		}
+		return 'Unknown'
+	}
 	# Uninstall-PSResource emits its own progress UI even when -Verbose is disabled.
 	# Update-Modules owns all user-facing progress and logging.
 	$ProgressPreference = 'SilentlyContinue'
+	$cleanResult = [PSCustomObject]@{
+		ModuleName         = $ModuleName
+		CleanedPaths       = @()
+		FailedPaths        = @()
+		PendingRebootPaths = @()
+		SkippedPaths       = @()
+		BackupPaths        = @()
+		OldVersionCount    = 0
+	}
 	if ($ModuleName -in $DoNotClean) {
 		New-Log "[$moduleName] Skipping cleaning as it is in the DoNotClean list."
-		return @()
+		return $cleanResult
+	}
+	$protectedModuleRoots = [System.Collections.Generic.List[string]]::new()
+	if ($env:WINDIR) { $protectedModuleRoots.Add((Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\Modules')) }
+	if ($PSHOME) { $protectedModuleRoots.Add((Join-Path $PSHOME 'Modules')) }
+	$matchedProtectedRoot = $null
+	foreach ($protectedRoot in $protectedModuleRoots) {
+		$normalizedProtectedRoot = [IO.Path]::GetFullPath($protectedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+		if (@($ModuleBasePaths | Where-Object {
+					([IO.Path]::GetFullPath($_).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar).StartsWith($normalizedProtectedRoot, [System.StringComparison]::OrdinalIgnoreCase)
+				}).Count -gt 0) {
+			$matchedProtectedRoot = $normalizedProtectedRoot
+			break
+		}
+	}
+	if ($matchedProtectedRoot) {
+		New-Log "[$ModuleName] Skipping cleanup because the target is inside protected runtime module directory '$matchedProtectedRoot'." -Level WARNING
+		return $cleanResult
 	}
 	[string]$latestVersionString = $LatestVersion.ToString()
 	[string]$latestVersionFullString = if ($PreReleaseVersion) { $PreReleaseVersion } else { $latestVersionString }
 	New-Log "[$moduleName] Starting cleanup of old versions (keeping v$latestVersionFullString)..." -Level VERBOSE
 	$cleanedItems = [System.Collections.Generic.List[string]]::new()
-	Remove-Module -Name $ModuleName -Force -ErrorAction SilentlyContinue
+	$failedItems = [System.Collections.Generic.List[object]]::new()
+	$pendingRebootItems = [System.Collections.Generic.List[string]]::new()
+	$skippedItems = [System.Collections.Generic.List[string]]::new()
+	$backupItems = [System.Collections.Generic.List[string]]::new()
+	$moduleUnloaded = $false
+	$restrictToCandidatePaths = $PSBoundParameters.ContainsKey('CandidateVersionPaths')
+	$candidatePathSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+	if ($restrictToCandidatePaths) {
+		foreach ($candidatePath in @($CandidateVersionPaths)) {
+			if (-not [string]::IsNullOrWhiteSpace($candidatePath)) {
+				$normalizedCandidatePath = [IO.Path]::GetFullPath($candidatePath).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+				$null = $candidatePathSet.Add($normalizedCandidatePath)
+			}
+		}
+	}
 	foreach ($basePath in $ModuleBasePaths) {
 		if (-not (Test-Path $basePath -PathType Container)) {
 			New-Log "[$moduleName] Base path '$basePath' for cleaning does not exist or is not a directory. Skipping." -Level WARNING
@@ -1783,17 +2298,28 @@ function Remove-OutdatedVersions {
 		}
 		$versionFolders = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue -Verbose:$false | Where-Object {
 			$folderName = $_.Name
+			$normalizedFolderPath = [IO.Path]::GetFullPath($_.FullName).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+			if ($restrictToCandidatePaths -and -not $candidatePathSet.Contains($normalizedFolderPath)) { return $false }
 			if ($folderName -notmatch '^\d+(\.\d+){1,4}(-.+)?$') { return $false }
 			if ($folderName -eq $latestVersionFullString -or $folderName -eq $latestVersionString) { return $false }
 			$folderBase = ($folderName -split '-', 2)[0]
 			$keepBase = ($latestVersionFullString -split '-', 2)[0]
-			$folderVer = $null; $keepVer = $null
+			$folderVer = $null
+			$keepVer = $null
 			if ([version]::TryParse($folderBase, [ref]$folderVer) -and [version]::TryParse($keepBase, [ref]$keepVer)) {
 				if ($folderVer -eq $keepVer) {
 					$folderPre = if ($folderName -match '-(.+)$') { $Matches[1] } else { $null }
 					$keepPre = if ($latestVersionFullString -match '-(.+)$') { $Matches[1] } else { $null }
 					if ($folderPre -eq $keepPre) { return $false }
 				}
+				if ($OnlyRemoveOlderThanLatest.IsPresent -and $folderVer -gt $keepVer) {
+					New-Log "[$moduleName] Keeping '$($_.FullName)': the folder version is higher than the retained v$latestVersionFullString." -Level WARNING
+					return $false
+				}
+			}
+			elseif ($OnlyRemoveOlderThanLatest.IsPresent) {
+				New-Log "[$moduleName] Keeping '$($_.FullName)': the folder version could not be parsed for a safe comparison." -Level WARNING
+				return $false
 			}
 			return $true
 		}
@@ -1801,87 +2327,232 @@ function Remove-OutdatedVersions {
 			foreach ($versionFolder in $versionFolders) {
 				$folderPath = $versionFolder.FullName
 				$versionString = $versionFolder.Name
+				$cleanResult.OldVersionCount++
 				$removed = $false
-				if (-not $removed) {
-					if ($PSCmdlet.ShouldProcess($folderPath, "Remove module '$ModuleName' version '$versionString'")) {
-						$uninstalledViaCmdlet = $false
-						$uninstallAttempted = $false
-						# Uninstall-PSResource only manages the standard CurrentUser and AllUsers locations.
-						$auModRoot = (Join-Path $env:ProgramFiles 'PowerShell\Modules') + '\'
-						$cuModRoot = (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'PowerShell\Modules') + '\'
-						$managedScope = if ($folderPath.StartsWith($auModRoot, [System.StringComparison]::OrdinalIgnoreCase)) { 'AllUsers' }
-						elseif ($folderPath.StartsWith($cuModRoot, [System.StringComparison]::OrdinalIgnoreCase)) { 'CurrentUser' }
-						else { $null }
-						if ($managedScope) {
-							$uninstallAttempted = $true
-							try {
-								Uninstall-PSResource -Name $ModuleName -Version $versionString -Scope $managedScope -Confirm:$false -Verbose:$false -SkipDependencyCheck -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
-								$uninstalledViaCmdlet = $true
+				if (-not $PSCmdlet.ShouldProcess($folderPath, "Remove module '$ModuleName' version '$versionString'")) {
+					New-Log "[$moduleName] Skipped removal of '$folderPath' due to ShouldProcess user choice." -Level DEBUG
+					$skippedItems.Add($folderPath)
+					continue
+				}
+				if (-not $moduleUnloaded) {
+					Remove-Module -Name $ModuleName -Force -ErrorAction SilentlyContinue
+					$moduleUnloaded = $true
+				}
+				if ($CleanupBackupPath) {
+					$backupZipPath = Backup-ModuleVersionFolder -ModuleName $ModuleName -VersionFolderPath $folderPath -BackupRootPath $CleanupBackupPath -ErrorAction SilentlyContinue
+					if ($backupZipPath) {
+						$backupItems.Add($backupZipPath)
+					}
+					else {
+						New-Log "[$moduleName] Skipping removal of '$folderPath' because the backup to '$CleanupBackupPath' failed." -Level WARNING
+						$failedItems.Add([PSCustomObject]@{ Path = $folderPath; Reason = 'BackupFailed' })
+						continue
+					}
+				}
+				$uninstalledViaCmdlet = $false
+				$uninstallAttempted = $false
+				$auModRoot = if ($env:ProgramFiles) { (Join-Path $env:ProgramFiles 'PowerShell\Modules') + '\' } else { $null } # Uninstall-PSResource only manages the standard CurrentUser and AllUsers locations.
+				$myDocumentsPath = [Environment]::GetFolderPath('MyDocuments')
+				$cuModRoot = if ($myDocumentsPath) { (Join-Path $myDocumentsPath 'PowerShell\Modules') + '\' } else { $null }
+				$managedScope = if ($auModRoot -and $folderPath.StartsWith($auModRoot, [System.StringComparison]::OrdinalIgnoreCase)) { 'AllUsers' }
+				elseif ($cuModRoot -and $folderPath.StartsWith($cuModRoot, [System.StringComparison]::OrdinalIgnoreCase)) { 'CurrentUser' }
+				else { $null }
+				if ($managedScope) {
+					$uninstallAttempted = $true
+					try {
+						Uninstall-PSResource -Name $ModuleName -Version $versionString -Scope $managedScope -Confirm:$false -Verbose:$false -SkipDependencyCheck -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
+						$uninstalledViaCmdlet = $true
+					}
+					catch {
+						New-Log "[$moduleName] Uninstall-PSResource failed for version '$versionString'" -Level ERROR
+					}
+				}
+				else {
+					New-Log "[$moduleName] '$folderPath' is in an unmanaged location that Uninstall-PSResource cannot target (it only manages the CurrentUser/AllUsers scopes). Removing the version folder directly." -Level VERBOSE
+				}
+				if ($uninstallAttempted) {
+					$uninstallDeadline = [DateTime]::UtcNow.AddSeconds(1)
+					while ((Test-Path -LiteralPath $folderPath -PathType Container) -and [DateTime]::UtcNow -lt $uninstallDeadline) {
+						Start-Sleep -Milliseconds 100
+					}
+				}
+				if (-not (Test-Path -LiteralPath $folderPath -PathType Container)) {
+					$cleanedItems.Add($folderPath)
+					$removed = $true
+				}
+				elseif ($uninstalledViaCmdlet) {
+					New-Log "[$moduleName] Uninstall-PSResource returned successfully for '$versionString', but '$folderPath' still exists; using filesystem cleanup." -Level WARNING
+				}
+				else {
+					New-Log "[$moduleName] Using filesystem cleanup for '$folderPath'." -Level VERBOSE
+				}
+				if (-not $removed -and (Test-Path -LiteralPath $folderPath -PathType Container -Verbose:$false)) {
+					New-Log "[$moduleName] Attempting Remove-Item -Recurse -Force on '$folderPath'..." -Level DEBUG
+					$lastRemoveException = $null
+					for ($attempt = 1; ($attempt -le 3) -and (-not $removed); $attempt++) {
+						try {
+							Get-ChildItem -LiteralPath $folderPath -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+								if ($_.Attributes -band [System.IO.FileAttributes]::ReadOnly) { try { $_.Attributes = [System.IO.FileAttributes]::Normal } catch { $null = $_ } }
 							}
-							catch {
-								New-Log "[$moduleName] Uninstall-PSResource failed for version '$versionString'" -Level ERROR
-							}
+							Remove-Item -LiteralPath $folderPath -Recurse -Force -ErrorAction Stop -Verbose:$false | Out-Null
 						}
-						else {
-							New-Log "[$moduleName] '$folderPath' is in an unmanaged location that Uninstall-PSResource cannot target (it only manages the CurrentUser/AllUsers scopes). Removing the version folder directly." -Level VERBOSE
-						}
-						if ($uninstallAttempted) {
-							$uninstallDeadline = [DateTime]::UtcNow.AddSeconds(1)
-							while ((Test-Path -LiteralPath $folderPath -PathType Container) -and [DateTime]::UtcNow -lt $uninstallDeadline) {
-								Start-Sleep -Milliseconds 100
-							}
+						catch {
+							$lastRemoveException = $_.Exception
 						}
 						if (-not (Test-Path -LiteralPath $folderPath -PathType Container)) {
-							$cleanedItems.Add($folderPath)
 							$removed = $true
+							break
+						}
+						if ($attempt -lt 3) {
+							Start-Sleep -Milliseconds ($attempt * 200)
+						}
+					}
+					$failureReason = Get-RemoveFailureReason -Exception $lastRemoveException
+					if (-not $removed -and $failureReason -in @('AccessDenied', 'Unknown')) {
+						New-Log "[$moduleName] Removal of '$folderPath' was denied ($failureReason); attempting an ACL repair before one more removal attempt..." -Level WARNING
+						$null = Repair-ModuleFolderAcl -ModuleName $ModuleName -FolderPath $folderPath -ErrorAction SilentlyContinue
+						try {
+							Remove-Item -LiteralPath $folderPath -Recurse -Force -ErrorAction Stop -Verbose:$false | Out-Null
+						}
+						catch {
+							$lastRemoveException = $_.Exception
+							$failureReason = Get-RemoveFailureReason -Exception $lastRemoveException
+						}
+						if (-not (Test-Path -LiteralPath $folderPath -PathType Container)) {
+							$removed = $true
+							New-Log "[$moduleName] Removed '$folderPath' after the ACL repair." -Level SUCCESS
+						}
+					}
+					if ($removed) {
+						if ($cleanedItems -notcontains $folderPath) {
+							$cleanedItems.Add($folderPath)
+						}
+					}
+					elseif ($ReplaceLockedModuleOnReboot.IsPresent) {
+						$rebootSchedule = Register-PendingDeleteOnReboot -ModuleName $ModuleName -FolderPath $folderPath -ErrorAction SilentlyContinue
+						if ($rebootSchedule -and $rebootSchedule.Scheduled -gt 0 -and $rebootSchedule.Failed -eq 0) {
+							New-Log "[$moduleName] Could not remove '$folderPath' now ($failureReason); scheduled $($rebootSchedule.Scheduled) item(s) for deletion on the next restart." -Level WARNING
+							$pendingRebootItems.Add($folderPath)
 						}
 						else {
-							if ($uninstalledViaCmdlet) {
-								New-Log "[$moduleName] Uninstall-PSResource returned successfully for '$versionString', but '$folderPath' still exists; using filesystem cleanup." -Level WARNING
-							}
-							else {
-								New-Log "[$moduleName] Using filesystem cleanup for '$folderPath'." -Level VERBOSE
-							}
-						}
-						if (-not $removed -and (Test-Path -LiteralPath $folderPath -PathType Container -Verbose:$false)) {
-							New-Log "[$moduleName] Attempting Remove-Item -Recurse -Force on '$folderPath'..." -Level DEBUG
-							$lastRemoveError = $null
-							for ($attempt = 1; ($attempt -le 3) -and (-not $removed); $attempt++) {
-								try {
-									Get-ChildItem -LiteralPath $folderPath -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
-										if ($_.Attributes -band [System.IO.FileAttributes]::ReadOnly) { try { $_.Attributes = [System.IO.FileAttributes]::Normal } catch { $null = $_ } }
-									}
-									Remove-Item -LiteralPath $folderPath -Recurse -Force -ErrorAction Stop -Verbose:$false | Out-Null
-								}
-								catch {
-									$lastRemoveError = $_.Exception.Message
-								}
-								if (-not (Test-Path -LiteralPath $folderPath -PathType Container)) {
-									$removed = $true
-									break
-								}
-								if ($attempt -lt 3) {
-									Start-Sleep -Milliseconds ($attempt * 200)
-								}
-							}
-							if ($removed) {
-								$cleanedItems.Add($folderPath)
-							}
-							else {
-								$failureDetail = if ($lastRemoveError) { $lastRemoveError } else { 'folder still exists after three attempts' }
-								New-Log "[$moduleName] Failed to remove '$folderPath': $failureDetail" -Level WARNING
-							}
+							$failureDetail = if ($lastRemoveException) { $lastRemoveException.Message } else { 'folder still exists after all attempts' }
+							New-Log "[$moduleName] Failed to remove '$folderPath' and reboot scheduling also failed (scheduled=$($rebootSchedule.Scheduled), failed=$($rebootSchedule.Failed)): $failureDetail" -Level WARNING
+							$failedItems.Add([PSCustomObject]@{ Path = $folderPath; Reason = $failureReason })
 						}
 					}
 					else {
-						New-Log "[$moduleName] Skipped removal of '$folderPath' due to ShouldProcess user choice." -Level DEBUG
+						$failureDetail = if ($lastRemoveException) { $lastRemoveException.Message } else { 'folder still exists after three attempts' }
+						New-Log "[$moduleName] Failed to remove '$folderPath' ($failureReason): $failureDetail" -Level WARNING
+						$failedItems.Add([PSCustomObject]@{ Path = $folderPath; Reason = $failureReason })
 					}
 				}
 			}
 		}
+		$normalizedBasePath = [IO.Path]::GetFullPath($basePath).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+		if ($restrictToCandidatePaths -and $candidatePathSet.Contains($normalizedBasePath)) {
+			$flatManifestPath = Join-Path -Path $basePath -ChildPath "$ModuleName.psd1"
+			if (-not (Test-Path -LiteralPath $flatManifestPath -PathType Leaf)) {
+				New-Log "[$ModuleName] Candidate flat path '$basePath' no longer contains '$ModuleName.psd1'. Skipping." -Level WARNING
+				$skippedItems.Add("$basePath [flat]")
+				continue
+			}
+			try {
+				$flatManifestData = Import-PowerShellDataFile -LiteralPath $flatManifestPath -ErrorAction Stop
+				$flatVersionString = [string]$flatManifestData.ModuleVersion
+				$flatPreRelease = if ($flatManifestData.PrivateData -and $flatManifestData.PrivateData.PSData) { [string]$flatManifestData.PrivateData.PSData.Prerelease } else { $null }
+				if ($flatPreRelease) { $flatVersionString = "$flatVersionString-$flatPreRelease" }
+				$parsedFlatVersion = Parse-ModuleVersion -VersionString $flatVersionString -ErrorAction SilentlyContinue
+			}
+			catch {
+				$parsedFlatVersion = $null
+				New-Log "[$ModuleName] Could not inspect candidate flat manifest '$flatManifestPath': $($_.Exception.Message)" -Level WARNING
+			}
+			if (-not $parsedFlatVersion -or -not $parsedFlatVersion.ModuleVersion) {
+				$skippedItems.Add("$basePath [flat]")
+				continue
+			}
+			if ($parsedFlatVersion.ModuleVersion -gt $LatestVersion -or $flatVersionString -eq $latestVersionFullString) {
+				New-Log "[$ModuleName] Keeping flat version '$flatVersionString' at '$basePath' because it is not older than retained v$latestVersionFullString." -Level WARNING
+				$skippedItems.Add("$basePath [flat:$flatVersionString]")
+				continue
+			}
+			$flatItems = @(Get-ChildItem -LiteralPath $basePath -Force -ErrorAction SilentlyContinue | Where-Object {
+					if (-not $_.PSIsContainer) { return $true }
+					if ($_.Name -match '^\d+(\.\d+){1,4}(-.+)?$') { return $false }
+					$retainedVersionDirectory = Get-ChildItem -LiteralPath $_.FullName -Directory -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
+						$_.Name -eq $latestVersionFullString -or $_.Name -eq $latestVersionString
+					} | Select-Object -First 1
+					if ($retainedVersionDirectory) {
+						New-Log "[$ModuleName] Preserving nested retained-version tree '$($_.FullName)' because it contains '$($retainedVersionDirectory.FullName)'." -Level VERBOSE
+						return $false
+					}
+					return $true
+				})
+			if ($flatItems.Count -eq 0) { continue }
+			$flatTarget = "$basePath [flat:$flatVersionString]"
+			$cleanResult.OldVersionCount++
+			if (-not $PSCmdlet.ShouldProcess($basePath, "Remove flat module '$ModuleName' version '$flatVersionString' while preserving version directories")) {
+				$skippedItems.Add($flatTarget)
+				continue
+			}
+			if (-not $moduleUnloaded) {
+				Remove-Module -Name $ModuleName -Force -ErrorAction SilentlyContinue
+				$moduleUnloaded = $true
+			}
+			if ($CleanupBackupPath) {
+				try {
+					$moduleBackupDir = Join-Path $CleanupBackupPath $ModuleName
+					if (-not (Test-Path -LiteralPath $moduleBackupDir -PathType Container)) {
+						$null = New-Item -ItemType Directory -Path $moduleBackupDir -Force -ErrorAction Stop
+					}
+					$backupZipPath = Join-Path $moduleBackupDir ("{0}_{1}.zip" -f $ModuleName, $flatVersionString)
+					Compress-Archive -LiteralPath @($flatItems.FullName) -DestinationPath $backupZipPath -CompressionLevel Optimal -Force -ErrorAction Stop
+					if (-not (Test-Path -LiteralPath $backupZipPath -PathType Leaf) -or (Get-Item -LiteralPath $backupZipPath -ErrorAction Stop).Length -eq 0) {
+						throw "Backup archive '$backupZipPath' was not created or is empty."
+					}
+					$backupItems.Add($backupZipPath)
+				}
+				catch {
+					New-Log "[$ModuleName] Flat backup failed for '$flatTarget': $($_.Exception.Message). The flat version was kept." -Level WARNING
+					$failedItems.Add([PSCustomObject]@{ Path = $flatTarget; Reason = 'BackupFailed' })
+					continue
+				}
+			}
+			$lastFlatRemoveException = $null
+			foreach ($flatItem in $flatItems) {
+				try {
+					if ($flatItem.PSIsContainer) { Remove-Item -LiteralPath $flatItem.FullName -Recurse -Force -ErrorAction Stop -Verbose:$false }
+					else { Remove-Item -LiteralPath $flatItem.FullName -Force -ErrorAction Stop -Verbose:$false }
+				}
+				catch { $lastFlatRemoveException = $_.Exception }
+			}
+			$remainingFlatItems = @($flatItems.FullName | Where-Object { Test-Path -LiteralPath $_ })
+			if ($remainingFlatItems.Count -eq 0) {
+				$cleanedItems.Add($flatTarget)
+				New-Log "[$ModuleName] Removed flat version '$flatVersionString' from '$basePath' and preserved all version directories." -Level SUCCESS
+			}
+			elseif ($ReplaceLockedModuleOnReboot.IsPresent) {
+				$scheduledCount = 0
+				$failedScheduleCount = 0
+				foreach ($remainingPath in $remainingFlatItems) {
+					$rebootSchedule = Register-PendingDeleteOnReboot -ModuleName $ModuleName -FolderPath $remainingPath -ErrorAction SilentlyContinue
+					$scheduledCount += $rebootSchedule.Scheduled
+					$failedScheduleCount += $rebootSchedule.Failed
+				}
+				if ($scheduledCount -gt 0 -and $failedScheduleCount -eq 0) { $pendingRebootItems.Add($flatTarget) }
+				else { $failedItems.Add([PSCustomObject]@{ Path = $flatTarget; Reason = (Get-RemoveFailureReason -Exception $lastFlatRemoveException) }) }
+			}
+			else {
+				$failedItems.Add([PSCustomObject]@{ Path = $flatTarget; Reason = (Get-RemoveFailureReason -Exception $lastFlatRemoveException) })
+			}
+		}
 	}
-	$cleanedPathsToReturn = $cleanedItems | Where-Object { $_ -is [string] } | Select-Object -Unique -Verbose:$false
-	return $cleanedPathsToReturn
+	$cleanResult.CleanedPaths = @($cleanedItems | Select-Object -Unique -Verbose:$false)
+	$cleanResult.FailedPaths = @($failedItems)
+	$cleanResult.PendingRebootPaths = @($pendingRebootItems | Select-Object -Unique -Verbose:$false)
+	$cleanResult.SkippedPaths = @($skippedItems | Select-Object -Unique -Verbose:$false)
+	$cleanResult.BackupPaths = @($backupItems | Select-Object -Unique -Verbose:$false)
+	return $cleanResult
 }
 #endregion Remove-OutdatedVersions
 #region Get-ManifestVersionInfo
@@ -2631,6 +3302,187 @@ function Compare-ModuleVersion {
 	}
 }
 #endregion Compare-ModuleVersion
+#region Parse-ModuleVersion
+function Parse-ModuleVersion {
+	<#
+    .SYNOPSIS
+    Parses numeric and prerelease module version strings.
+    .DESCRIPTION
+    Separates a two-to-four-part numeric version from an optional SemVer-style prerelease
+    label and returns both the original and normalized values.
+    .PARAMETER VersionString
+    Version string to parse.
+    .INPUTS
+    None.
+    .OUTPUTS
+    System.Management.Automation.PSCustomObject containing ModuleVersion,
+    ModuleVersionString, IsPrerelease, PreReleaseLabel, and related normalized values;
+    or null when the numeric version is invalid.
+    .EXAMPLE
+    Parse-ModuleVersion '2.0.0-preview.3'
+    Returns version 2.0.0 with prerelease label preview.3.
+    .NOTES
+    Build metadata is not parsed.
+    .LINK
+    Compare-ModuleVersion
+    #>
+	[CmdletBinding()]
+	param (
+		[Parameter()][string]$VersionString
+	)
+	if ([string]::IsNullOrWhiteSpace($VersionString)) { return $null }
+	[version]$version = $null
+	[string]$baseVersionString = $VersionString
+	[string]$prereleasePart = $null
+	[bool]$isSemVerStyle = $false
+	[bool]$isPrerelease = $false
+	$semVerRegex = '^(\d+(\.\d+){1,3})-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)$'
+	if ($VersionString -match $semVerRegex) {
+		$baseVersionString = $Matches[1]
+		$prereleasePart = $Matches[3]
+		$isSemVerStyle = $true
+		$isPrerelease = $true
+		New-Log "Parse-ModuleVersion: Matched SemVer pattern. Base:'$baseVersionString', Label:'$prereleasePart'" -Level VERBOSE
+	}
+	else {
+		$baseVersionString = $VersionString
+	}
+	$isParseable = [version]::TryParse($baseVersionString, [ref]$version)
+	if ($isParseable) {
+		return [PSCustomObject]@{
+			ModuleVersionStringNoPrefix = $baseVersionString
+			ModuleVersionString         = $VersionString
+			ModuleVersion               = $version
+			IsSemVer                    = $isSemVerStyle
+			IsPrerelease                = $isPrerelease
+			PreReleaseLabel             = if (![string]::IsNullOrEmpty($prereleasePart)) { $prereleasePart } else { $null }
+			PreReleaseVersion           = if (![string]::IsNullOrEmpty($prereleasePart)) { "$($version)-$($prereleasePart)" } else { $null }
+		}
+	}
+	else {
+		New-Log "Parse-ModuleVersion: Could not parse base version string '$baseVersionString' (derived from original '$VersionString') into a [System.Version] object." -Level WARNING
+		return $null
+	}
+}
+#endregion Parse-ModuleVersion
+#region Compare-ModuleVersion
+function Compare-ModuleVersion {
+	<#
+    .SYNOPSIS
+    Compares two module version strings.
+    .DESCRIPTION
+    Compares numeric versions first, then prerelease labels. For equal numeric versions,
+    a prerelease is treated as newer than a stable version. Recognized label priority is
+    dev, alpha, beta, preview, then rc; numeric label suffixes break ties.
+    .PARAMETER VersionA
+    Current or first version.
+    .PARAMETER VersionB
+    Candidate or second version.
+    .PARAMETER ReturnBoolean
+    Returns true only when VersionB is newer than VersionA. Without this switch, returns
+    the version string considered newer.
+    .INPUTS
+    None.
+    .OUTPUTS
+    System.Boolean when ReturnBoolean is used; otherwise System.String.
+    .EXAMPLE
+    Compare-ModuleVersion -VersionA '1.0.0-beta1' -VersionB '1.0.0-beta2' -ReturnBoolean
+    Returns true.
+    .NOTES
+    The prerelease ordering is script-specific and intentionally differs from SemVer,
+    where a stable release normally has higher precedence than its prereleases.
+    .LINK
+    Parse-ModuleVersion
+    #>
+	[CmdletBinding()]
+	param (
+		[Parameter(Mandatory)][string]$VersionA,
+		[Parameter(Mandatory)][string]$VersionB,
+		[Parameter()][switch]$ReturnBoolean
+	)
+	if ([string]::IsNullOrWhiteSpace($VersionA) -or [string]::IsNullOrWhiteSpace($VersionB)) {
+		New-Log "Compare-ModuleVersion: One or both versions are null or empty." -Level VERBOSE
+		if ($ReturnBoolean) { return $false } else { return $VersionA }
+	}
+	$typePriority = @{
+		'dev'     = 5
+		'alpha'   = 4
+		'beta'    = 3
+		'preview' = 2
+		'rc'      = 1
+	}
+	$baseVersionA, $prereleaseA = $VersionA -split '-', 2
+	$baseVersionB, $prereleaseB = $VersionB -split '-', 2
+	try {
+		$versionObjectA = [System.Version]::new($baseVersionA)
+		$versionObjectB = [System.Version]::new($baseVersionB)
+		$baseComparison = $versionObjectA.CompareTo($versionObjectB)
+		if ($baseComparison -ne 0) {
+			New-Log "Compare-ModuleVersion: Base versions differ - A=$baseVersionA, B=$baseVersionB. Result=$baseComparison" -Level VERBOSE
+			if ($ReturnBoolean) {
+				return $baseComparison -lt 0
+			}
+			else {
+				return $(if ($baseComparison -gt 0) { $VersionA } else { $VersionB })
+			}
+		}
+	}
+	catch {
+		New-Log "Compare-ModuleVersion: Error parsing version strings. Falling back to string comparison." -Level ERROR
+		if ($ReturnBoolean) { return $false } else { return $VersionA }
+	}
+	if ($prereleaseA -and -not $prereleaseB) {
+		New-Log "Compare-ModuleVersion: VersionA has prerelease ($prereleaseA), VersionB doesn't. A is newer." -Level VERBOSE
+		if ($ReturnBoolean) { return $false } else { return $VersionA }
+	}
+	elseif (-not $prereleaseA -and $prereleaseB) {
+		New-Log "Compare-ModuleVersion: VersionB has prerelease ($prereleaseB), VersionA doesn't. B is newer." -Level VERBOSE
+		if ($ReturnBoolean) { return $true } else { return $VersionB }
+	}
+	elseif (-not $prereleaseA -and -not $prereleaseB) {
+		New-Log "Compare-ModuleVersion: Neither version has prerelease. Versions are equal." -Level VERBOSE
+		if ($ReturnBoolean) { return $false } else { return $VersionA }
+	}
+	$prereleaseA = $prereleaseA.ToLower().Trim('.- ')
+	$prereleaseB = $prereleaseB.ToLower().Trim('.- ')
+	$regex = "^($(($typePriority.Keys | ForEach-Object {[regex]::Escape($_)}) -join '|'))(?:[\.\-_]?(\d+))?$"
+	$matchA = [regex]::Match($prereleaseA, $regex)
+	$matchB = [regex]::Match($prereleaseB, $regex)
+	if (-not $matchA.Success -or -not $matchB.Success) {
+		New-Log "Compare-ModuleVersion: Non-standard prerelease format. Performing simple string comparison." -Level VERBOSE
+		$comparisonResult = $prereleaseA.CompareTo($prereleaseB)
+		if ($ReturnBoolean) {
+			return $comparisonResult -lt 0
+		}
+		else {
+			return $(if ($comparisonResult -ge 0) { $VersionA } else { $VersionB })
+		}
+	}
+	$typeA = $matchA.Groups[1].Value
+	$numberA = if ([string]::IsNullOrEmpty($matchA.Groups[2].Value)) { 0 } else { [int]$matchA.Groups[2].Value }
+	$typeB = $matchB.Groups[1].Value
+	$numberB = if ([string]::IsNullOrEmpty($matchB.Groups[2].Value)) { 0 } else { [int]$matchB.Groups[2].Value }
+	New-Log "Compare-ModuleVersion: Comparing prerelease A='$typeA'($numberA) vs B='$typeB'($numberB)" -Level VERBOSE
+	if ($typeA -ne $typeB) {
+		$priorityA = $typePriority[$typeA]
+		$priorityB = $typePriority[$typeB]
+		New-Log "Prerelease types differ. Priority A=$priorityA, B=$priorityB." -Level VERBOSE
+		if ($ReturnBoolean) {
+			return $priorityB -gt $priorityA
+		}
+		else {
+			return $(if ($priorityA -gt $priorityB) { $VersionA } else { $VersionB })
+		}
+	}
+	New-Log "Prerelease types are the same ('$typeA'). Comparing numbers: A=$numberA, B=$numberB." -Level VERBOSE
+	if ($ReturnBoolean) {
+		return $numberB -gt $numberA
+	}
+	else {
+		return $(if ($numberA -ge $numberB) { $VersionA } else { $VersionB })
+	}
+}
+#endregion Compare-ModuleVersion
 if (-not (Get-Command -Name New-Log -ErrorAction SilentlyContinue)) {
 	try {
 		$newLogUrl = 'https://raw.githubusercontent.com/Harze2k/Shared-PowerShell-Functions/main/New-Log.ps1'
@@ -2685,15 +3537,18 @@ $blackList = @{
 }
 $paths = $env:PSModulePath.Split(';') | Where-Object { $_ -notmatch '\\7\\Modules|.vscode|System32' }
 ### MAIN SCRIPT EXECUTION ###
-$moduleInfo = Get-ModuleInfo -Paths $paths -IgnoredModules $ignoredModules
+$script:moduleInfo = Get-ModuleInfo -Paths $paths -IgnoredModules $ignoredModules
 $outdated = Get-ModuleUpdateStatus -ModuleInventory $moduleInfo -TimeoutSeconds 45 -Repositories $repos -MatchAuthor -BlackList $blackList
 if ($outdated) {
 	#Remove -WhatIf to actually perform the updates.
 	#Use -Clean to remove old versions after update.
 	#Use -PreRelease to include prerelease versions in the update check.
 	#Use -MaxUpdateNumber to limit the number of updates performed in one run.
-	$outdated | Update-Modules -Clean -PreRelease -MaxUpdateNumber 5 -WhatIf
+	#Use -CleanupBackupPath 'D:\ModuleBackups' to zip each old version before it is removed.
+	#Use -ReplaceLockedModuleOnReboot to also schedule locked or access-denied old versions for deletion on the next restart.
+	$outdated | Update-Modules -Clean -PreRelease -MaxUpdateNumber 5 -CleanupBackupPath 'C:\ModuleBackups' -WhatIf
 }
 else {
 	New-Log "No outdated modules to update" -Level SUCCESS
 }
+Update-Modules -OnlyCleanUpOldModules -CleanupBackupPath 'C:\ModuleBackups' -WhatIf #Cleanup-only mode: previews the old module versions that would be removed (keeping the highest version per path) without any update check. Remove -WhatIf to clean for real, add -CleanupBackupPath 'C:\ModuleBackups' to zip each version first.
